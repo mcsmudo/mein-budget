@@ -41,8 +41,11 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
  .wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}
  .form{grid-template-columns:1fr 1fr}.receipt-grid{grid-template-columns:1fr}
 }
+
+.cloud-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cloud-grid input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}.cloud-wide{grid-column:1/-1}.cloud-user{font-weight:700}.cloud-ok{color:#047857;font-weight:700}.cloud-warn{color:#b45309;font-weight:700}@media(max-width:800px){.cloud-grid{grid-template-columns:1fr}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="wrap">
@@ -56,6 +59,19 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <button class="red" id="reset">Variable Ausgaben zurücksetzen</button>
 <span class="status" id="status"></span>
 </div>
+</div>
+<div class="card">
+<h2>☁️ Cloud-Synchronisierung</h2>
+<div class="muted" style="margin-bottom:10px">Einmal auf iPhone und PC einrichten. Danach werden deine Budgetdaten über Supabase synchronisiert. Nur den Publishable Key verwenden – niemals Secret oder Service-Role-Key.</div>
+<div class="cloud-grid">
+<div><div class="label">Supabase Project URL</div><input id="sbUrl" type="url" placeholder="https://dein-projekt.supabase.co"></div>
+<div><div class="label">Publishable Key</div><input id="sbKey" type="text" placeholder="sb_publishable_…" autocomplete="off"></div>
+<div class="cloud-wide toolbar" style="margin-top:0"><button class="gray" id="sbSaveConfig">☁️ Verbindung speichern</button><span id="cloudStatus" class="status">Cloud noch nicht eingerichtet.</span></div>
+<div><div class="label">E-Mail</div><input id="sbEmail" type="email" autocomplete="username" placeholder="deine E-Mail"></div>
+<div><div class="label">Passwort</div><input id="sbPassword" type="password" autocomplete="current-password" placeholder="Passwort"></div>
+<div class="cloud-wide toolbar" style="margin-top:0"><button class="blue" id="sbLogin">🔐 Anmelden</button><button class="gray" id="sbSignup">👤 Konto erstellen</button><button class="red" id="sbLogout" style="display:none">Abmelden</button></div>
+</div>
+<div class="muted" id="cloudUser"></div>
 </div>
 <div class="tabs" id="tabs"></div>
 <div id="app"></div>
@@ -108,6 +124,11 @@ function makeData(){
 let data=makeData();
 let paid=Array.from({length:12},()=>({}));
 let current=-1;
+let sbClient=null;
+let sbUser=null;
+let lastCloudUpdatedAt=null;
+let cloudPollTimer=null;
+let cloudWriteTimer=null;
 
 const euro=n=>Number(n||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
 const fixedMonthly=fixed.reduce((sum,item)=>sum+item[1],0);
@@ -421,8 +442,84 @@ function escapeHtml(v){
 
 function save(show=true){
  localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));
- if(show)setStatus("✓ Gespeichert");
+ if(show)setStatus(sbUser?"✓ Lokal gespeichert – Cloud wird synchronisiert …":"✓ Gespeichert");
+ if(sbUser){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
 }
+
+async function saveCloud(){
+ if(!sbClient||!sbUser)return;
+ try{
+  const updated=new Date().toISOString();
+  const {error}=await sbClient.from("budget_data").upsert({user_id:sbUser.id,data,paid,updated_at:updated},{onConflict:"user_id"});
+  if(error)throw error;
+  lastCloudUpdatedAt=updated;setStatus("✓ Mit Cloud synchronisiert");setCloudStatus("✓ Synchronisiert","cloud-ok");
+ }catch(e){console.error(e);setStatus("⚠️ Lokal gespeichert – Cloud-Sync fehlgeschlagen");setCloudStatus("⚠️ Cloud-Sync fehlgeschlagen: "+(e.message||e),"cloud-warn");}
+}
+
+async function loadCloud(){
+ if(!sbClient||!sbUser)return;
+ try{
+  const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();
+  if(error)throw error;
+  if(row){
+   data=Array.isArray(row.data)?row.data:makeData();
+   paid=Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}));
+   lastCloudUpdatedAt=row.updated_at||null;localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));render();setStatus("✓ Cloud-Daten geladen");
+  }else{await saveCloud();}
+ }catch(e){console.error(e);setStatus("⚠️ Cloud-Daten konnten nicht geladen werden");setCloudStatus("⚠️ "+(e.message||e),"cloud-warn");}
+}
+
+async function checkCloudUpdates(){
+ if(!sbClient||!sbUser)return;
+ try{
+  const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();
+  if(error||!row||!row.updated_at)return;
+  if(!lastCloudUpdatedAt||new Date(row.updated_at)>new Date(lastCloudUpdatedAt)){
+   data=Array.isArray(row.data)?row.data:data;paid=Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):paid;lastCloudUpdatedAt=row.updated_at;localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));render();setStatus("↻ Cloud-Änderung übernommen");
+  }
+ }catch(e){console.warn("Cloud polling",e)}
+}
+
+function setCloudStatus(text,cls=""){const el=document.getElementById("cloudStatus");if(el){el.textContent=text;el.className="status "+cls;}}
+
+function updateCloudUser(user){
+ sbUser=user||null;
+ const login=document.getElementById("sbLogin"),signup=document.getElementById("sbSignup"),logout=document.getElementById("sbLogout"),u=document.getElementById("cloudUser");
+ if(user){login.style.display="none";signup.style.display="none";logout.style.display="inline-block";u.innerHTML='☁️ Angemeldet als <span class="cloud-user">'+escapeHtml(user.email||"")+'</span>';setCloudStatus("✓ Cloud verbunden","cloud-ok");}
+ else{login.style.display="inline-block";signup.style.display="inline-block";logout.style.display="none";u.textContent="";}
+}
+
+async function startCloudAuth(){
+ if(!sbClient)return;
+ const {data:{session}}=await sbClient.auth.getSession();updateCloudUser(session?.user||null);
+ sbClient.auth.onAuthStateChange((event,session)=>{setTimeout(()=>{updateCloudUser(session?.user||null);if(session?.user)loadCloud();},0);});
+ if(session?.user)await loadCloud();
+ if(!cloudPollTimer)cloudPollTimer=setInterval(checkCloudUpdates,15000);
+}
+
+function initCloudUI(){
+ const cfg=JSON.parse(localStorage.getItem("budget2026_supabase_config")||"null");
+ if(cfg){document.getElementById("sbUrl").value=cfg.url||"";document.getElementById("sbKey").value=cfg.key||"";try{sbClient=window.supabase.createClient(cfg.url,cfg.key);}catch(e){console.error(e);}}
+ document.getElementById("sbSaveConfig").onclick=()=>{
+  const url=document.getElementById("sbUrl").value.trim().replace(/\/$/,"");const key=document.getElementById("sbKey").value.trim();
+  if(!/^https:\/\/[^\s]+\.supabase\.co$/.test(url)||!key){setCloudStatus("⚠️ Project URL und Publishable Key prüfen.","cloud-warn");return;}
+  localStorage.setItem("budget2026_supabase_config",JSON.stringify({url,key}));sbClient=window.supabase.createClient(url,key);setCloudStatus("✓ Verbindung eingerichtet. Jetzt anmelden.","cloud-ok");startCloudAuth();
+ };
+ document.getElementById("sbLogin").onclick=async()=>{
+  if(!sbClient){setCloudStatus("⚠️ Erst Verbindung speichern.","cloud-warn");return;}
+  const email=document.getElementById("sbEmail").value.trim(),password=document.getElementById("sbPassword").value;if(!email||!password){setCloudStatus("⚠️ E-Mail und Passwort eingeben.","cloud-warn");return;}
+  setCloudStatus("⏳ Anmeldung …");const {error}=await sbClient.auth.signInWithPassword({email,password});if(error)setCloudStatus("❌ "+error.message,"cloud-warn");
+ };
+ document.getElementById("sbSignup").onclick=async()=>{
+  if(!sbClient){setCloudStatus("⚠️ Erst Verbindung speichern.","cloud-warn");return;}
+  const email=document.getElementById("sbEmail").value.trim(),password=document.getElementById("sbPassword").value;if(!email||password.length<6){setCloudStatus("⚠️ E-Mail und mindestens 6 Zeichen Passwort eingeben.","cloud-warn");return;}
+  setCloudStatus("⏳ Konto wird erstellt …");const {data:res,error}=await sbClient.auth.signUp({email,password});if(error){setCloudStatus("❌ "+error.message,"cloud-warn");return;}
+  setCloudStatus(res.session?"✓ Konto erstellt und angemeldet.":"✓ Konto erstellt. Bitte E-Mail bestätigen und danach anmelden.","cloud-ok");
+ };
+ document.getElementById("sbLogout").onclick=async()=>{if(sbClient)await sbClient.auth.signOut();};
+ if(sbClient)startCloudAuth();
+}
+
 
 function load(){
  try{
@@ -466,6 +563,7 @@ function bindOCR(){
   save(false);renderMonth();bindOCR();setStatus("✓ Bon-Ausgabe eingetragen – verfügbare Summe aktualisiert.");
  };
 }
+initCloudUI();
 document.getElementById("save").onclick=()=>save(true);
 document.getElementById("load").onclick=()=>{load();render();setStatus("✓ Gespeicherte Daten geladen")};
 document.getElementById("reset").onclick=()=>{
