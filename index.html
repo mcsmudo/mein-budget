@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mein Budget 2026</title>
+<title>Mein Budget</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f3f5f7;color:#1f2937;font-family:Arial,system-ui,sans-serif}
@@ -50,7 +50,7 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <body>
 <div class="wrap">
 <div class="card">
-<h1>Mein Budget 2026</h1>
+<h1 id="appTitle">Mein Budget 2026</h1>
 <div class="muted">Jahresübersicht mit allen Einnahmen, Fixkosten, Sonderkosten und tatsächlich eingetragenen variablen Ausgaben.</div>
 <div class="toolbar">
 <button class="blue" id="save">💾 Speichern</button>
@@ -59,9 +59,21 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <button class="red" id="reset">Variable Ausgaben zurücksetzen</button>
 <span class="status" id="status"></span>
 </div>
+<div class="toolbar" style="align-items:center">
+<span style="font-weight:700">Jahr:</span>
+<button class="gray" id="prevYear" title="Vorheriges Jahr">←</button>
+<input id="yearInput" type="number" min="2026" max="2099" step="1" value="2026" style="width:82px;padding:7px;border:1px solid #cbd5e1;border-radius:7px;text-align:center;font:inherit;font-weight:700">
+<button class="gray" id="nextYear" title="Nächstes Jahr">→</button>
+<button class="blue" id="applyYear">Jahr öffnen</button>
+<span class="muted">Jedes Jahr hat seine eigenen Budgetdaten.</span>
 </div>
-<div class="card">
-<h2>☁️ Cloud-Synchronisierung</h2>
+</div>
+<div class="card" id="cloudCard">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+<h2 style="margin:0">☁️ Cloud: <span id="cloudCompactStatus">Status wird geladen …</span></h2>
+<button class="gray" id="toggleCloud">⚙️ Einstellungen</button>
+</div>
+<div id="cloudDetails" style="display:none;margin-top:12px">
 <div class="muted" style="margin-bottom:10px">Einmal auf iPhone und PC einrichten. Danach werden deine Budgetdaten über Supabase synchronisiert. Nur den Publishable Key verwenden – niemals Secret oder Service-Role-Key.</div>
 <div class="cloud-grid">
 <div><div class="label">Supabase Project URL</div><input id="sbUrl" type="url" placeholder="https://dein-projekt.supabase.co"></div>
@@ -72,6 +84,7 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <div class="cloud-wide toolbar" style="margin-top:0"><button class="blue" id="sbLogin">🔐 Anmelden</button><button class="gray" id="sbSignup">👤 Konto erstellen</button><button class="red" id="sbLogout" style="display:none">Abmelden</button></div>
 </div>
 <div class="muted" id="cloudUser"></div>
+</div>
 </div>
 <div class="tabs" id="tabs"></div>
 <div id="app"></div>
@@ -106,23 +119,26 @@ const scheduled={
  "Weihnachtsgeld":[0,0,0,0,0,0,0,0,0,0,2000,0]
 };
 
-function incomesDefault(m){
+function incomesDefault(m,year=2026){
  return {
   "Gehalt":2760,
   "Trainergeld":scheduled.Trainergeld[m],
-  "Baukindergeld":scheduled.Baukindergeld[m],
+  "Baukindergeld":year<=2030?scheduled.Baukindergeld[m]:0,
   "Bonus":scheduled.Bonus[m],
   "Weihnachtsgeld":scheduled.Weihnachtsgeld[m],
   "Sonstige Einnahmen":0
  };
 }
 
-function makeData(){
- return Array.from({length:12},(_,m)=>({income:incomesDefault(m),expenses:[]}));
+function makeData(year=2026){
+ return Array.from({length:12},(_,m)=>({income:incomesDefault(m,year),expenses:[]}));
 }
 
-let data=makeData();
-let paid=Array.from({length:12},()=>({}));
+let selectedYear=2026;
+let allYears={"2026":makeData(2026)};
+let allPaid={"2026":Array.from({length:12},()=>({}))};
+let data=allYears["2026"];
+let paid=allPaid["2026"];
 let current=-1;
 let sbClient=null;
 let sbUser=null;
@@ -130,6 +146,29 @@ let lastCloudUpdatedAt=null;
 let cloudPollTimer=null;
 let cloudWriteTimer=null;
 
+function ensureYear(year){
+ const y=String(year);
+ if(!Array.isArray(allYears[y])) allYears[y]=makeData(Number(y));
+ if(!Array.isArray(allPaid[y])||allPaid[y].length!==12) allPaid[y]=Array.from({length:12},()=>({}));
+ data=allYears[y];
+ paid=allPaid[y];
+}
+function switchYear(year){
+ year=Math.max(2026,Math.min(2099,Math.round(Number(year)||2026)));
+ selectedYear=year;
+ ensureYear(year);
+ current=-1;
+ document.getElementById("yearInput").value=year;
+ updateAppTitle();
+ render();
+ save(false);
+ setStatus("✓ Jahr "+year+" geöffnet");
+}
+function updateAppTitle(){
+ const title=document.getElementById("appTitle");
+ if(title) title.textContent="Mein Budget "+selectedYear;
+ document.title="Mein Budget "+selectedYear;
+}
 const euro=n=>Number(n||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
 const fixedMonthly=fixed.reduce((sum,item)=>sum+item[1],0);
 
@@ -181,7 +220,7 @@ function renderYear(){
  '<div class="stat"><small>Variable Ausgaben</small><strong>'+euro(yv)+'</strong></div>'+
  '<div class="stat"><small>Überschuss</small><strong class="'+(yb<0?"negative":"positive")+'">'+euro(yb)+'</strong></div>'+
  '</div></div>'+
- '<div class="card annual"><h2>Januar bis Dezember</h2><div class="tablewrap"><table>'+
+ '<div class="card annual"><h2>Januar bis Dezember <span class="muted">· Budgetjahr <span id="yearHeading"></span></span></h2><div class="tablewrap"><table>'+
  '<thead><tr><th>Posten</th>'+months.map(m=>'<th>'+m+'</th>').join("")+'</tr></thead>'+
  '<tbody id="budget"></tbody></table></div></div>';
 
@@ -214,6 +253,7 @@ function renderYear(){
  const add=document.createElement("div");add.className="toolbar";add.style.marginTop="12px";
  add.innerHTML='<button class="blue" id="goAdd">+ Variable Ausgabe eintragen</button><span class="muted">Die Eingabe erfolgt im jeweiligen Monatsregister.</span>';
  app.querySelector(".annual").appendChild(add);
+  const yh=document.getElementById("yearHeading");if(yh)yh.textContent=selectedYear;
  document.getElementById("goAdd").onclick=()=>{current=0;render()};
 }
 
@@ -441,7 +481,9 @@ function escapeHtml(v){
 }
 
 function save(show=true){
- localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));
+ allYears[String(selectedYear)]=data;
+ allPaid[String(selectedYear)]=paid;
+ localStorage.setItem("budget2026_data",JSON.stringify({year:selectedYear,years:allYears,paidYears:allPaid,data,paid}));
  if(show)setStatus(sbUser?"✓ Lokal gespeichert – Cloud wird synchronisiert …":"✓ Gespeichert");
  if(sbUser){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
 }
@@ -450,7 +492,7 @@ async function saveCloud(){
  if(!sbClient||!sbUser)return;
  try{
   const updated=new Date().toISOString();
-  const {error}=await sbClient.from("budget_data").upsert({user_id:sbUser.id,data,paid,updated_at:updated},{onConflict:"user_id"});
+  const {error}=await sbClient.from("budget_data").upsert({user_id:sbUser.id,data:allYears,paid:allPaid,updated_at:updated},{onConflict:"user_id"});
   if(error)throw error;
   lastCloudUpdatedAt=updated;setStatus("✓ Mit Cloud synchronisiert");setCloudStatus("✓ Synchronisiert","cloud-ok");
  }catch(e){console.error(e);setStatus("⚠️ Lokal gespeichert – Cloud-Sync fehlgeschlagen");setCloudStatus("⚠️ Cloud-Sync fehlgeschlagen: "+(e.message||e),"cloud-warn");}
@@ -462,9 +504,19 @@ async function loadCloud(){
   const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();
   if(error)throw error;
   if(row){
-   data=Array.isArray(row.data)?row.data:makeData();
-   paid=Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}));
-   lastCloudUpdatedAt=row.updated_at||null;localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));render();setStatus("✓ Cloud-Daten geladen");
+   if(Array.isArray(row.data)){
+    allYears={"2026":row.data};
+    allPaid={"2026":Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};
+   }else{
+    allYears=(row.data&&typeof row.data==="object")?row.data:{};
+    allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};
+   }
+   if(!Array.isArray(allYears[String(selectedYear)])) allYears[String(selectedYear)]=makeData(selectedYear);
+   if(!Array.isArray(allPaid[String(selectedYear)])||allPaid[String(selectedYear)].length!==12) allPaid[String(selectedYear)]=Array.from({length:12},()=>({}));
+   data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];
+   lastCloudUpdatedAt=row.updated_at||null;
+   localStorage.setItem("budget2026_data",JSON.stringify({year:selectedYear,years:allYears,paidYears:allPaid,data,paid}));
+   render();setStatus("✓ Cloud-Daten geladen");
   }else{await saveCloud();}
  }catch(e){console.error(e);setStatus("⚠️ Cloud-Daten konnten nicht geladen werden");setCloudStatus("⚠️ "+(e.message||e),"cloud-warn");}
 }
@@ -480,13 +532,17 @@ async function checkCloudUpdates(){
  }catch(e){console.warn("Cloud polling",e)}
 }
 
-function setCloudStatus(text,cls=""){const el=document.getElementById("cloudStatus");if(el){el.textContent=text;el.className="status "+cls;}}
+function setCloudStatus(text,cls=""){
+ const el=document.getElementById("cloudStatus");if(el){el.textContent=text;el.className="status "+cls;}
+ const compact=document.getElementById("cloudCompactStatus");
+ if(compact)compact.textContent=text;
+}
 
 function updateCloudUser(user){
  sbUser=user||null;
  const login=document.getElementById("sbLogin"),signup=document.getElementById("sbSignup"),logout=document.getElementById("sbLogout"),u=document.getElementById("cloudUser");
  if(user){login.style.display="none";signup.style.display="none";logout.style.display="inline-block";u.innerHTML='☁️ Angemeldet als <span class="cloud-user">'+escapeHtml(user.email||"")+'</span>';setCloudStatus("✓ Cloud verbunden","cloud-ok");}
- else{login.style.display="inline-block";signup.style.display="inline-block";logout.style.display="none";u.textContent="";}
+ else{login.style.display="inline-block";signup.style.display="inline-block";logout.style.display="none";u.textContent="";setCloudStatus("Noch nicht angemeldet","");}
 }
 
 async function startCloudAuth(){
@@ -498,6 +554,13 @@ async function startCloudAuth(){
 }
 
 function initCloudUI(){
+ const toggle=document.getElementById("toggleCloud");
+ const details=document.getElementById("cloudDetails");
+ if(toggle&&details)toggle.onclick=()=>{
+  const open=details.style.display!=="none";
+  details.style.display=open?"none":"block";
+  toggle.textContent=open?"⚙️ Einstellungen":"✕ Einstellungen schließen";
+ };
  const cfg=JSON.parse(localStorage.getItem("budget2026_supabase_config")||"null");
  if(cfg){document.getElementById("sbUrl").value=cfg.url||"";document.getElementById("sbKey").value=cfg.key||"";try{sbClient=window.supabase.createClient(cfg.url,cfg.key);}catch(e){console.error(e);}}
  document.getElementById("sbSaveConfig").onclick=()=>{
@@ -526,15 +589,25 @@ function load(){
   const raw=localStorage.getItem("budget2026_data");
   if(!raw)return;
   const saved=JSON.parse(raw);
-  if(saved&&Array.isArray(saved.data)){
-   data=saved.data.map((d,i)=>({
-    income:{...incomesDefault(i),...(d.income||{})},
+  if(saved&&saved.years&&typeof saved.years==="object"){
+   allYears=saved.years;
+   allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
+   selectedYear=Number(saved.year)||2026;
+   ensureYear(selectedYear);
+  }else if(saved&&Array.isArray(saved.data)){
+   allYears={"2026":saved.data.map((d,i)=>({
+    income:{...incomesDefault(i,2026),...(d.income||{})},
     expenses:Array.isArray(d.expenses)?d.expenses:[]
-   }));
-   paid=Array.isArray(saved.paid)&&saved.paid.length===12?saved.paid.map(x=>x||{}):Array.from({length:12},()=>({}));
+   }))};
+   allPaid={"2026":Array.isArray(saved.paid)&&saved.paid.length===12?saved.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};
+   selectedYear=2026;ensureYear(2026);
   }else if(Array.isArray(saved)&&saved.length===12){
-   data=saved.map((d,i)=>({income:{...incomesDefault(i),...(d.income||{})},expenses:Array.isArray(d.expenses)?d.expenses:[]}));
+   allYears={"2026":saved.map((d,i)=>({income:{...incomesDefault(i,2026),...(d.income||{})},expenses:Array.isArray(d.expenses)?d.expenses:[]}))};
+   allPaid={"2026":Array.from({length:12},()=>({}))};
+   selectedYear=2026;ensureYear(2026);
   }
+  const yi=document.getElementById("yearInput");if(yi)yi.value=selectedYear;
+  updateAppTitle();
  }catch(e){console.error(e)}
 }
 
@@ -564,6 +637,12 @@ function bindOCR(){
  };
 }
 initCloudUI();
+
+document.getElementById("prevYear").onclick=()=>switchYear(selectedYear-1);
+document.getElementById("nextYear").onclick=()=>switchYear(selectedYear+1);
+document.getElementById("applyYear").onclick=()=>switchYear(document.getElementById("yearInput").value);
+document.getElementById("yearInput").onkeydown=e=>{if(e.key==="Enter")switchYear(e.target.value)};
+
 document.getElementById("save").onclick=()=>save(true);
 document.getElementById("load").onclick=()=>{load();render();setStatus("✓ Gespeicherte Daten geladen")};
 document.getElementById("reset").onclick=()=>{
@@ -571,7 +650,7 @@ document.getElementById("reset").onclick=()=>{
  data.forEach(d=>d.expenses=[]);paid=Array.from({length:12},()=>({}));save(false);render();setStatus("✓ Variable Ausgaben und Häkchen gelöscht");
 };
 document.getElementById("csv").onclick=()=>{
- const rows=[["Monat","Typ","Posten","Datum","Kategorie","Betrag"]];
+ const rows=[["Jahr","Monat","Typ","Posten","Datum","Kategorie","Betrag"]];
  months.forEach((month,m)=>{
   incomeNames.forEach(n=>rows.push([month,"Einnahme",n,"","",data[m].income[n]]));
   fixed.forEach(x=>rows.push([month,"Fixkosten",x[0],"","",x[1]]));
@@ -580,7 +659,7 @@ document.getElementById("csv").onclick=()=>{
  });
  const csv=rows.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(";")).join("\n");
  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
- const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Mein_Budget_2026.csv";a.click();
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Mein_Budget.csv";a.click();
  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
@@ -589,6 +668,8 @@ function render(){
  if(current===-1)renderYear();else{renderMonth();bindOCR()}
 }
 load();
+ensureYear(selectedYear);
+updateAppTitle();
 render();
 </script>
 </body>
