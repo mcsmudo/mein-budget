@@ -23,8 +23,6 @@ button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointe
 table{border-collapse:collapse;width:100%;min-width:700px}
 th,td{padding:8px 7px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
 th{background:#f8fafc;text-align:right}th:first-child,td:first-child{text-align:left}
-.annual table{min-width:1250px;table-layout:fixed}.annual th:first-child,.annual td:first-child{width:205px}
-.annual th:not(:first-child),.annual td:not(:first-child){width:90px;text-align:right}
 .section td{background:#eef2f7!important;font-weight:800}.total td{background:#f8fafc!important;font-weight:800}
 .positive{color:#047857;font-weight:800}.negative{color:#b91c1c;font-weight:800}
 .money{font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -51,7 +49,7 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <div class="wrap">
 <div class="card">
 <h1 id="appTitle">Mein Budget 2026</h1>
-<div class="muted">Jahresübersicht mit allen Einnahmen, Fixkosten, Sonderkosten und tatsächlich eingetragenen variablen Ausgaben.</div>
+<div class="muted">Monatsübersicht mit allen Einnahmen, Fixkosten, Sonderkosten und tatsächlich eingetragenen variablen Ausgaben.</div>
 <div class="toolbar">
 <button class="blue" id="save">💾 Speichern</button>
 <button class="gray" id="load">↩ Laden</button>
@@ -197,11 +195,11 @@ function setStatus(text){document.getElementById("status").textContent=text}
 function renderTabs(){
  const tabs=document.getElementById("tabs");
  tabs.innerHTML="";
- ["Jahresübersicht",...months].forEach((name,i)=>{
+ months.forEach((name,i)=>{
   const b=document.createElement("button");
-  b.className="tab "+((i-1)===current?"active":"");
+  b.className="tab "+(i===current?"active":"");
   b.textContent=name;
-  b.onclick=()=>{current=i-1;render()};
+  b.onclick=()=>{current=i;render()};
   tabs.appendChild(b);
  });
 }
@@ -278,15 +276,15 @@ function renderIncomeMonth(){
   const td=document.createElement("td");td.textContent=name;tr.appendChild(td);
   const cell=document.createElement("td");
   const wrap=document.createElement("div");wrap.className="income";
-  const minus=document.createElement("button");minus.textContent="−";
+  const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";
   const input=document.createElement("input");input.type="number";input.step="10";input.value=Number(data[m].income[name]).toFixed(2);
   const euroSign=document.createElement("span");euroSign.textContent=" €";
-  const plus=document.createElement("button");plus.textContent="+";
+  const plus=document.createElement("button");plus.textContent="+";plus.title="1 Cent hinzufügen";
   function change(delta){
    data[m].income[name]=Math.max(0,(Number(input.value)||0)+delta);
    input.value=data[m].income[name].toFixed(2);updateMonth();save(false);
   }
-  minus.onclick=()=>change(-100);plus.onclick=()=>change(100);
+  minus.onclick=()=>change(-0.01);plus.onclick=()=>change(0.01);
   input.oninput=()=>{data[m].income[name]=Math.max(0,Number(input.value)||0);updateMonth();save(false)};
   wrap.append(minus,input,euroSign,plus);cell.appendChild(wrap);tr.appendChild(cell);body.appendChild(tr);
  });
@@ -310,10 +308,10 @@ function renderFixedMonth(){
   const amount=document.createElement("td");amount.className="money";
   if(item.idx!==undefined){
    const wrap=document.createElement("div");wrap.className="income";
-   const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";
+   const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";minus.title="1 Cent abziehen";
    const input=document.createElement("input");input.type="number";input.step="0.01";input.min="0";input.value=item.amount.toFixed(2);
    const euroSign=document.createElement("span");euroSign.textContent=" €";
-   const plus=document.createElement("button");plus.textContent="+";plus.title="1 Cent hinzufügen";
+   const plus=document.createElement("button");plus.textContent="+";plus.title="1 Cent hinzufügen";plus.title="1 Cent hinzufügen";
    function change(delta){
     const next=Math.max(0,Math.round(((Number(input.value)||0)+delta)*100)/100);
     fixedValues(m)[item.idx]=next;input.value=next.toFixed(2);updateMonth();save(false);
