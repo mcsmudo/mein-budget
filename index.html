@@ -56,6 +56,9 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <button class="blue" id="save">💾 Speichern</button>
 <button class="gray" id="load">↩ Laden</button>
 <button class="gray" id="csv">⬇ CSV</button>
+<button class="gray" id="backup">💾 Backup</button>
+<button class="gray" id="restoreBackup">↩ Backup laden</button>
+<input id="backupFile" type="file" accept=".json,application/json" style="display:none">
 <button class="red" id="reset">Variable Ausgaben zurücksetzen</button>
 <span class="status" id="status"></span>
 </div>
@@ -101,6 +104,18 @@ const fixed=[
  ["Sparen Lian",25],["Sparen Finn",25],["Sparen",325],["BU 1",102.58],["BU 2",64.85],
  ["Telefon/Internet",50],["Handy",18],["Sky",31],["Spotify",18]
 ];
+let fixedByYear={};
+function ensureFixedYear(year){
+ const y=String(year);
+ if(!Array.isArray(fixedByYear[y])) fixedByYear[y]=Array.from({length:12},()=>fixed.map(x=>Number(x[1])));
+ for(let m=0;m<12;m++){
+  if(!Array.isArray(fixedByYear[y][m])||fixedByYear[y][m].length!==fixed.length)
+   fixedByYear[y][m]=fixed.map(x=>Number(x[1]));
+ }
+ return fixedByYear[y];
+}
+function fixedValues(m){return ensureFixedYear(selectedYear)[m];}
+function fixedMonthly(m){return fixedValues(m).reduce((s,v)=>s+(Number(v)||0),0);}
 
 const special={
  "KFZ":[500,0,0,0,0,0,500,0,0,0,0,0],
@@ -139,7 +154,7 @@ let allYears={"2026":makeData(2026)};
 let allPaid={"2026":Array.from({length:12},()=>({}))};
 let data=allYears["2026"];
 let paid=allPaid["2026"];
-let current=-1;
+let current=0;
 let sbClient=null;
 let sbUser=null;
 let lastCloudUpdatedAt=null;
@@ -156,7 +171,7 @@ function ensureYear(year){
 function switchYear(year){
  year=Math.max(2026,Math.min(2099,Math.round(Number(year)||2026)));
  selectedYear=year;
- ensureYear(year);
+ ensureYear(year);ensureFixedYear(year);
  current=-1;
  document.getElementById("yearInput").value=year;
  updateAppTitle();
@@ -170,11 +185,10 @@ function updateAppTitle(){
  document.title="Mein Budget "+selectedYear;
 }
 const euro=n=>Number(n||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
-const fixedMonthly=fixed.reduce((sum,item)=>sum+item[1],0);
 
 function incomeTotal(m){return incomeNames.reduce((sum,name)=>sum+(Number(data[m].income[name])||0),0)}
 function specialTotal(m){return Object.values(special).reduce((sum,arr)=>sum+(Number(arr[m])||0),0)}
-function fixedTotal(m){return fixedMonthly+specialTotal(m)}
+function fixedTotal(m){return fixedMonthly(m)+specialTotal(m)}
 function variableTotal(m){return data[m].expenses.reduce((sum,e)=>sum+(Number(e.amount)||0),0)}
 function balance(m){return incomeTotal(m)-fixedTotal(m)-variableTotal(m)}
 
@@ -205,56 +219,6 @@ function appendRow(label,values,cls=""){
   const td=document.createElement("td");td.className="money";td.textContent=euro(value);tr.appendChild(td);
  });
  document.getElementById("budget").appendChild(tr);
-}
-
-function renderYear(){
- const app=document.getElementById("app");
- let yi=0,yf=0,yv=0;
- for(let m=0;m<12;m++){yi+=incomeTotal(m);yf+=fixedTotal(m);yv+=variableTotal(m)}
- const yb=yi-yf-yv;
-
- app.innerHTML=
- '<div class="card"><div class="cards">'+
- '<div class="stat"><small>Einnahmen Jahr</small><strong>'+euro(yi)+'</strong></div>'+
- '<div class="stat"><small>Fix + Sonderkosten</small><strong>'+euro(yf)+'</strong></div>'+
- '<div class="stat"><small>Variable Ausgaben</small><strong>'+euro(yv)+'</strong></div>'+
- '<div class="stat"><small>Überschuss</small><strong class="'+(yb<0?"negative":"positive")+'">'+euro(yb)+'</strong></div>'+
- '</div></div>'+
- '<div class="card annual"><h2>Januar bis Dezember <span class="muted">· Budgetjahr <span id="yearHeading"></span></span></h2><div class="tablewrap"><table>'+
- '<thead><tr><th>Posten</th>'+months.map(m=>'<th>'+m+'</th>').join("")+'</tr></thead>'+
- '<tbody id="budget"></tbody></table></div></div>';
-
- appendSection("EINNAHMEN");
- incomeNames.forEach(name=>appendRow(name,data.map(d=>d.income[name])));
- appendRow("SUMME EINNAHMEN",months.map((_,m)=>incomeTotal(m)),"total");
-
- appendSection("FIXKOSTEN");
- fixed.forEach(item=>appendRow(item[0],Array(12).fill(item[1])));
- appendRow("SUMME monatliche Fixkosten",Array(12).fill(fixedMonthly),"total");
-
- appendSection("SONDERKOSTEN");
- Object.entries(special).forEach(([name,values])=>appendRow(name,values));
- appendRow("SUMME FIX + SONDERKOSTEN",months.map((_,m)=>fixedTotal(m)),"total");
-
- appendSection("TATSÄCHLICHE VARIABLE AUSGABEN");
- const maxRows=Math.max(1,...data.map(d=>d.expenses.length));
- for(let r=0;r<maxRows;r++){
-  const tr=document.createElement("tr");
-  const label=document.createElement("td");label.textContent="Ausgabe "+(r+1);tr.appendChild(label);
-  for(let m=0;m<12;m++){
-   const td=document.createElement("td");td.className="money";
-   const e=data[m].expenses[r];td.textContent=e?euro(e.amount):"";tr.appendChild(td);
-  }
-  document.getElementById("budget").appendChild(tr);
- }
- appendRow("SUMME VARIABLE AUSGABEN",months.map((_,m)=>variableTotal(m)),"total");
- appendRow("MONATSÜBERSCHUSS",months.map((_,m)=>balance(m)),"total");
-
- const add=document.createElement("div");add.className="toolbar";add.style.marginTop="12px";
- add.innerHTML='<button class="blue" id="goAdd">+ Variable Ausgabe eintragen</button><span class="muted">Die Eingabe erfolgt im jeweiligen Monatsregister.</span>';
- app.querySelector(".annual").appendChild(add);
-  const yh=document.getElementById("yearHeading");if(yh)yh.textContent=selectedYear;
- document.getElementById("goAdd").onclick=()=>{current=0;render()};
 }
 
 function renderMonth(){
@@ -333,8 +297,9 @@ function renderIncomeMonth(){
 
 function renderFixedMonth(){
  const body=document.getElementById("fixedRows"),m=current;body.innerHTML="";
- const items=fixed.map(x=>({name:x[0],amount:x[1],key:"f:"+x[0]}));
- Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({name:name,amount:arr[m],key:"s:"+name})});
+ const values=fixedValues(m);
+ const items=fixed.map((x,i)=>({name:x[0],amount:Number(values[i])||0,key:"f:"+x[0],idx:i}));
+ Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({name,amount:arr[m],key:"s:"+name});});
  items.forEach(item=>{
   const tr=document.createElement("tr");
   const check=document.createElement("td");check.style.textAlign="left";
@@ -342,8 +307,22 @@ function renderFixedMonth(){
   cb.onchange=()=>{paid[m][item.key]=cb.checked;save(false);renderMonth()};
   check.appendChild(cb);tr.appendChild(check);
   const name=document.createElement("td");name.textContent=item.name;tr.appendChild(name);
-  const amount=document.createElement("td");amount.className="money";amount.textContent=euro(item.amount);tr.appendChild(amount);
-  body.appendChild(tr);
+  const amount=document.createElement("td");amount.className="money";
+  if(item.idx!==undefined){
+   const wrap=document.createElement("div");wrap.className="income";
+   const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";
+   const input=document.createElement("input");input.type="number";input.step="0.01";input.min="0";input.value=item.amount.toFixed(2);
+   const euroSign=document.createElement("span");euroSign.textContent=" €";
+   const plus=document.createElement("button");plus.textContent="+";plus.title="1 Cent hinzufügen";
+   function change(delta){
+    const next=Math.max(0,Math.round(((Number(input.value)||0)+delta)*100)/100);
+    fixedValues(m)[item.idx]=next;input.value=next.toFixed(2);updateMonth();save(false);
+   }
+   minus.onclick=()=>change(-0.01);plus.onclick=()=>change(0.01);
+   input.oninput=()=>{fixedValues(m)[item.idx]=Math.max(0,Math.round((Number(input.value)||0)*100)/100);updateMonth();save(false)};
+   wrap.append(minus,input,euroSign,plus);amount.appendChild(wrap);
+  }else amount.textContent=euro(item.amount);
+  tr.appendChild(amount);body.appendChild(tr);
  });
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
  const open=fixedTotal(m)-paidAmount;
@@ -388,7 +367,8 @@ function updateMonth(){
  const planned=totalIncome-fixedTotal(m)-variable;
  const plannedEl=document.getElementById("plannedFree");
  if(plannedEl){plannedEl.textContent=euro(planned);plannedEl.className=planned<0?"negative":"positive";}
- const items=fixed.map(x=>({amount:x[1],key:"f:"+x[0]}));
+ const values=fixedValues(m);
+  const items=fixed.map((x,i)=>({amount:Number(values[i])||0,key:"f:"+x[0]}));
  Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
  const available=totalIncome-paidAmount-variable;
@@ -480,10 +460,15 @@ function escapeHtml(v){
  return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
 }
 
-function save(show=true){
+function buildStore(){
  allYears[String(selectedYear)]=data;
  allPaid[String(selectedYear)]=paid;
- localStorage.setItem("budget2026_data",JSON.stringify({year:selectedYear,years:allYears,paidYears:allPaid,data,paid}));
+ ensureFixedYear(selectedYear);
+ return {app:"MeinBudget",formatVersion:3,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear};
+}
+function save(show=true){
+ const store=buildStore();
+ localStorage.setItem("budget2026_data",JSON.stringify(store));
  if(show)setStatus(sbUser?"✓ Lokal gespeichert – Cloud wird synchronisiert …":"✓ Gespeichert");
  if(sbUser){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
 }
@@ -507,15 +492,20 @@ async function loadCloud(){
    if(Array.isArray(row.data)){
     allYears={"2026":row.data};
     allPaid={"2026":Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};
+   }else if(row.data&&row.data.years){
+    allYears=row.data.years;
+    fixedByYear=(row.data.fixedByYear&&typeof row.data.fixedByYear==="object")?row.data.fixedByYear:{};
+    allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};
    }else{
     allYears=(row.data&&typeof row.data==="object")?row.data:{};
     allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};
    }
    if(!Array.isArray(allYears[String(selectedYear)])) allYears[String(selectedYear)]=makeData(selectedYear);
    if(!Array.isArray(allPaid[String(selectedYear)])||allPaid[String(selectedYear)].length!==12) allPaid[String(selectedYear)]=Array.from({length:12},()=>({}));
+   ensureYear(selectedYear);ensureFixedYear(selectedYear);
    data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];
    lastCloudUpdatedAt=row.updated_at||null;
-   localStorage.setItem("budget2026_data",JSON.stringify({year:selectedYear,years:allYears,paidYears:allPaid,data,paid}));
+   localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
    render();setStatus("✓ Cloud-Daten geladen");
   }else{await saveCloud();}
  }catch(e){console.error(e);setStatus("⚠️ Cloud-Daten konnten nicht geladen werden");setCloudStatus("⚠️ "+(e.message||e),"cloud-warn");}
@@ -584,21 +574,56 @@ function initCloudUI(){
 }
 
 
+function createBackup(){
+ const store=buildStore();
+ const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json;charset=utf-8"});
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);
+ a.download="MeinBudget_Backup_"+new Date().toISOString().slice(0,10)+".json";
+ a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+ setStatus("✓ Vollständiges Backup erstellt");
+}
+
+function restoreBackupFile(file){
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{
+   const saved=JSON.parse(reader.result);
+   if(!saved||saved.app!=="MeinBudget"||!saved.years||typeof saved.years!=="object")throw new Error("Ungültiges Backup");
+   if(!confirm("Backup laden? Die aktuell lokal gespeicherten Daten werden durch diesen Backup-Stand ersetzt."))return;
+   allYears=saved.years;
+   allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
+   fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
+   selectedYear=Number(saved.currentYear)||2026;
+   ensureYear(selectedYear);ensureFixedYear(selectedYear);
+   localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
+   render();updateAppTitle();
+   if(sbUser){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
+   setStatus("✓ Backup geladen – Cloud wird aktualisiert …");
+  }catch(e){console.error(e);setStatus("❌ Backup konnte nicht geladen werden.");alert("Die Datei ist kein gültiges MeinBudget-Backup.");}
+ };
+ reader.readAsText(file);
+}
+
 function load(){
  try{
   const raw=localStorage.getItem("budget2026_data");
   if(!raw)return;
   const saved=JSON.parse(raw);
-  if(saved&&saved.years&&typeof saved.years==="object"){
+  if(saved&&saved.app==="MeinBudget"&&saved.years&&typeof saved.years==="object"){
+   allYears=saved.years;
+   allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
+   fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
+   selectedYear=Number(saved.currentYear)||2026;
+   ensureYear(selectedYear);ensureFixedYear(selectedYear);
+  }else if(saved&&saved.years&&typeof saved.years==="object"){
    allYears=saved.years;
    allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
    selectedYear=Number(saved.year)||2026;
    ensureYear(selectedYear);
   }else if(saved&&Array.isArray(saved.data)){
-   allYears={"2026":saved.data.map((d,i)=>({
-    income:{...incomesDefault(i,2026),...(d.income||{})},
-    expenses:Array.isArray(d.expenses)?d.expenses:[]
-   }))};
+   allYears={"2026":saved.data.map((d,i)=>({income:{...incomesDefault(i,2026),...(d.income||{})},expenses:Array.isArray(d.expenses)?d.expenses:[]}))};
    allPaid={"2026":Array.isArray(saved.paid)&&saved.paid.length===12?saved.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};
    selectedYear=2026;ensureYear(2026);
   }else if(Array.isArray(saved)&&saved.length===12){
@@ -643,6 +668,10 @@ document.getElementById("nextYear").onclick=()=>switchYear(selectedYear+1);
 document.getElementById("applyYear").onclick=()=>switchYear(document.getElementById("yearInput").value);
 document.getElementById("yearInput").onkeydown=e=>{if(e.key==="Enter")switchYear(e.target.value)};
 
+document.getElementById("backup").onclick=createBackup;
+document.getElementById("restoreBackup").onclick=()=>document.getElementById("backupFile").click();
+document.getElementById("backupFile").onchange=e=>{const file=e.target.files[0];if(file)restoreBackupFile(file);e.target.value="";};
+
 document.getElementById("save").onclick=()=>save(true);
 document.getElementById("load").onclick=()=>{load();render();setStatus("✓ Gespeicherte Daten geladen")};
 document.getElementById("reset").onclick=()=>{
@@ -669,7 +698,9 @@ function render(){
 }
 load();
 ensureYear(selectedYear);
+ensureFixedYear(selectedYear);
 updateAppTitle();
+localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
 render();
 </script>
 </body>
