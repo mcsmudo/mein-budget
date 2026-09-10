@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mein Budget 2026</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f5f7;color:#1f2937;font-family:Arial,system-ui,sans-serif}
+.wrap{max-width:1500px;margin:auto;padding:18px}
+.card{background:#fff;border:1px solid #dfe3e8;border-radius:12px;padding:16px;margin-bottom:15px}
+h1{margin:0 0 4px;font-size:28px}h2{font-size:18px;margin:0 0 12px}
+.muted{color:#6b7280;font-size:13px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}
+.blue{background:#2563eb;color:#fff}.gray{background:#e5e7eb}.red{background:#fee2e2;color:#991b1b}
+.tabs{display:flex;gap:3px;overflow-x:auto;margin-bottom:15px}
+.tab{background:#e5e7eb;border:1px solid #dfe3e8;white-space:nowrap}.tab.active{background:#fff;color:#2563eb}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{background:#f8fafc;border:1px solid #dfe3e8;border-radius:9px;padding:11px}
+.stat small{color:#6b7280}.stat strong{display:block;font-size:21px;margin-top:3px;white-space:nowrap}
+.tablewrap{overflow-x:auto;border:1px solid #dfe3e8;border-radius:9px}
+table{border-collapse:collapse;width:100%;min-width:700px}
+th,td{padding:8px 7px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+th{background:#f8fafc;text-align:right}th:first-child,td:first-child{text-align:left}
+.annual table{min-width:1250px;table-layout:fixed}.annual th:first-child,.annual td:first-child{width:205px}
+.annual th:not(:first-child),.annual td:not(:first-child){width:90px;text-align:right}
+.section td{background:#eef2f7!important;font-weight:800}.total td{background:#f8fafc!important;font-weight:800}
+.positive{color:#047857;font-weight:800}.negative{color:#b91c1c;font-weight:800}
+.money{font-variant-numeric:tabular-nums;white-space:nowrap}
+.income{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.income input{width:90px;padding:6px;border:1px solid #cbd5e1;border-radius:7px;text-align:right}
+.income button{width:30px;height:30px;padding:0;background:#e5e7eb;font-size:18px}
+.form{display:grid;grid-template-columns:130px 1fr 180px 130px auto;gap:8px;align-items:end}
+.form input,.form select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}
+.label{font-size:12px;color:#6b7280;margin-bottom:4px}
+.status{font-size:12px;color:#047857;min-height:18px;margin-top:7px}
+.receipt-grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #dfe3e8;max-height:220px;overflow:auto}
+@media(max-width:800px){
+ .wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}
+ .form{grid-template-columns:1fr 1fr}.receipt-grid{grid-template-columns:1fr}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+<div class="card">
+<h1>Mein Budget 2026</h1>
+<div class="muted">Jahresübersicht mit allen Einnahmen, Fixkosten, Sonderkosten und tatsächlich eingetragenen variablen Ausgaben.</div>
+<div class="toolbar">
+<button class="blue" id="save">💾 Speichern</button>
+<button class="gray" id="load">↩ Laden</button>
+<button class="gray" id="csv">⬇ CSV</button>
+<button class="red" id="reset">Variable Ausgaben zurücksetzen</button>
+<span class="status" id="status"></span>
+</div>
+</div>
+<div class="tabs" id="tabs"></div>
+<div id="app"></div>
+</div>
+
+<script>
+"use strict";
+
+const months=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const incomeNames=["Gehalt","Trainergeld","Baukindergeld","Bonus","Weihnachtsgeld","Sonstige Einnahmen"];
+
+const fixed=[
+ ["Gas",107],["Wasser",25],["Strom",67],["Bausparen",520],["Zinsen",364.58],["Kredit",65],
+ ["Sparen Lian",25],["Sparen Finn",25],["Sparen",325],["BU 1",102.58],["BU 2",64.85],
+ ["Telefon/Internet",50],["Handy",18],["Sky",31],["Spotify",18]
+];
+
+const special={
+ "KFZ":[500,0,0,0,0,0,500,0,0,0,0,0],
+ "Rechtsschutz":[0,0,260.43,0,0,0,0,0,0,0,0,0],
+ "KFZ-Steuer":[0,0,0,0,0,240,0,0,0,0,0,0],
+ "Hausrat":[149.10,0,0,0,0,0,149.10,0,0,0,0,0],
+ "Brandkasse":[0,0,279.54,0,0,0,0,0,0,0,0,0]
+};
+
+const categories=["Aldi","Amazon","Bäcker","Bankkarte","Combi","dm","EDEKA","Friseur","Klarna","Lidl","Müller","Netto","PayPal","REWE","Restaurant","Rossmann","Sonstige","TEMU"];
+
+const scheduled={
+ "Trainergeld":[300,0,0,300,0,0,300,0,0,300,0,0],
+ "Baukindergeld":[0,0,0,1200,0,0,0,0,0,0,0,0],
+ "Bonus":[0,0,0,0,600,0,0,0,0,0,0,0],
+ "Weihnachtsgeld":[0,0,0,0,0,0,0,0,0,0,2000,0]
+};
+
+function incomesDefault(m){
+ return {
+  "Gehalt":2760,
+  "Trainergeld":scheduled.Trainergeld[m],
+  "Baukindergeld":scheduled.Baukindergeld[m],
+  "Bonus":scheduled.Bonus[m],
+  "Weihnachtsgeld":scheduled.Weihnachtsgeld[m],
+  "Sonstige Einnahmen":0
+ };
+}
+
+function makeData(){
+ return Array.from({length:12},(_,m)=>({income:incomesDefault(m),expenses:[]}));
+}
+
+let data=makeData();
+let paid=Array.from({length:12},()=>({}));
+let current=-1;
+
+const euro=n=>Number(n||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
+const fixedMonthly=fixed.reduce((sum,item)=>sum+item[1],0);
+
+function incomeTotal(m){return incomeNames.reduce((sum,name)=>sum+(Number(data[m].income[name])||0),0)}
+function specialTotal(m){return Object.values(special).reduce((sum,arr)=>sum+(Number(arr[m])||0),0)}
+function fixedTotal(m){return fixedMonthly+specialTotal(m)}
+function variableTotal(m){return data[m].expenses.reduce((sum,e)=>sum+(Number(e.amount)||0),0)}
+function balance(m){return incomeTotal(m)-fixedTotal(m)-variableTotal(m)}
+
+function setStatus(text){document.getElementById("status").textContent=text}
+
+function renderTabs(){
+ const tabs=document.getElementById("tabs");
+ tabs.innerHTML="";
+ ["Jahresübersicht",...months].forEach((name,i)=>{
+  const b=document.createElement("button");
+  b.className="tab "+((i-1)===current?"active":"");
+  b.textContent=name;
+  b.onclick=()=>{current=i-1;render()};
+  tabs.appendChild(b);
+ });
+}
+
+function appendSection(text){
+ const tr=document.createElement("tr");tr.className="section";
+ const td=document.createElement("td");td.colSpan=13;td.textContent=text;
+ tr.appendChild(td);document.getElementById("budget").appendChild(tr);
+}
+
+function appendRow(label,values,cls=""){
+ const tr=document.createElement("tr");if(cls)tr.className=cls;
+ const first=document.createElement("td");first.textContent=label;tr.appendChild(first);
+ values.forEach(value=>{
+  const td=document.createElement("td");td.className="money";td.textContent=euro(value);tr.appendChild(td);
+ });
+ document.getElementById("budget").appendChild(tr);
+}
+
+function renderYear(){
+ const app=document.getElementById("app");
+ let yi=0,yf=0,yv=0;
+ for(let m=0;m<12;m++){yi+=incomeTotal(m);yf+=fixedTotal(m);yv+=variableTotal(m)}
+ const yb=yi-yf-yv;
+
+ app.innerHTML=
+ '<div class="card"><div class="cards">'+
+ '<div class="stat"><small>Einnahmen Jahr</small><strong>'+euro(yi)+'</strong></div>'+
+ '<div class="stat"><small>Fix + Sonderkosten</small><strong>'+euro(yf)+'</strong></div>'+
+ '<div class="stat"><small>Variable Ausgaben</small><strong>'+euro(yv)+'</strong></div>'+
+ '<div class="stat"><small>Überschuss</small><strong class="'+(yb<0?"negative":"positive")+'">'+euro(yb)+'</strong></div>'+
+ '</div></div>'+
+ '<div class="card annual"><h2>Januar bis Dezember</h2><div class="tablewrap"><table>'+
+ '<thead><tr><th>Posten</th>'+months.map(m=>'<th>'+m+'</th>').join("")+'</tr></thead>'+
+ '<tbody id="budget"></tbody></table></div></div>';
+
+ appendSection("EINNAHMEN");
+ incomeNames.forEach(name=>appendRow(name,data.map(d=>d.income[name])));
+ appendRow("SUMME EINNAHMEN",months.map((_,m)=>incomeTotal(m)),"total");
+
+ appendSection("FIXKOSTEN");
+ fixed.forEach(item=>appendRow(item[0],Array(12).fill(item[1])));
+ appendRow("SUMME monatliche Fixkosten",Array(12).fill(fixedMonthly),"total");
+
+ appendSection("SONDERKOSTEN");
+ Object.entries(special).forEach(([name,values])=>appendRow(name,values));
+ appendRow("SUMME FIX + SONDERKOSTEN",months.map((_,m)=>fixedTotal(m)),"total");
+
+ appendSection("TATSÄCHLICHE VARIABLE AUSGABEN");
+ const maxRows=Math.max(1,...data.map(d=>d.expenses.length));
+ for(let r=0;r<maxRows;r++){
+  const tr=document.createElement("tr");
+  const label=document.createElement("td");label.textContent="Ausgabe "+(r+1);tr.appendChild(label);
+  for(let m=0;m<12;m++){
+   const td=document.createElement("td");td.className="money";
+   const e=data[m].expenses[r];td.textContent=e?euro(e.amount):"";tr.appendChild(td);
+  }
+  document.getElementById("budget").appendChild(tr);
+ }
+ appendRow("SUMME VARIABLE AUSGABEN",months.map((_,m)=>variableTotal(m)),"total");
+ appendRow("MONATSÜBERSCHUSS",months.map((_,m)=>balance(m)),"total");
+
+ const add=document.createElement("div");add.className="toolbar";add.style.marginTop="12px";
+ add.innerHTML='<button class="blue" id="goAdd">+ Variable Ausgabe eintragen</button><span class="muted">Die Eingabe erfolgt im jeweiligen Monatsregister.</span>';
+ app.querySelector(".annual").appendChild(add);
+ document.getElementById("goAdd").onclick=()=>{current=0;render()};
+}
+
+function renderMonth(){
+ const m=current,app=document.getElementById("app");
+ app.innerHTML=
+ '<div class="card"><h2>'+months[m]+'</h2><div class="cards">'+
+ '<div class="stat"><small>Einnahmen</small><strong id="mi"></strong></div>'+
+ '<div class="stat"><small>Fixkosten geplant</small><strong id="plannedFixed"></strong></div>'+
+ '<div class="stat"><small>Geplant übrig</small><strong id="plannedFree"></strong></div>'+
+ '<div class="stat"><small>Aktuell noch verfügbar</small><strong id="available"></strong></div>'+
+ '</div></div>'+
+ '<div class="card"><h2>💰 Einnahmen</h2><table><thead><tr><th>Einnahme</th><th>Betrag</th></tr></thead><tbody id="incomeRows"></tbody></table></div>'+
+ '<div class="card"><h2>🔒 Fixkosten</h2>'+
+ '<div class="muted" style="margin-bottom:10px">Die Fixkosten bleiben vollständig im Budget. Mit dem Häkchen markierst du nur, dass die Abbuchung bereits erfolgt ist.</div>'+
+ '<div class="tablewrap"><table><thead><tr><th>✓ bezahlt</th><th>Posten</th><th>Betrag</th></tr></thead><tbody id="fixedRows"></tbody></table></div>'+
+ '<div style="margin-top:12px" class="cards">'+
+ '<div class="stat"><small>Fixkosten gesamt</small><strong id="fixedTotalStat"></strong></div>'+
+ '<div class="stat"><small>Bereits abgebucht</small><strong id="paidFixed"></strong></div>'+
+ '<div class="stat"><small>Noch offen</small><strong id="openFixed"></strong></div>'+
+ '<div class="stat"><small>Aktuell frei</small><strong id="freeAfterPaid"></strong></div>'+
+ '</div></div>'+
+ '<div class="card"><h2>🧾 Bon hochladen & auslesen</h2>'+
+ '<div class="muted" style="margin-bottom:10px">Bon-Foto auswählen. Für beste Ergebnisse: Bon komplett, gerade, scharf und gut beleuchtet fotografieren. Datum, Händler, Kategorie und Betrag werden vorgeschlagen und können vor dem Übernehmen geändert werden.</div>'+
+ '<div class="receipt-grid"><div><div class="label">Bon-Foto</div><input id="receiptFile" type="file" accept="image/*"></div>'+
+ '<button class="blue" id="scanReceipt">🔎 Bon auslesen</button></div>'+
+ '<div id="ocrStatus" class="status"></div>'+
+ '<div id="ocrPreview" style="display:none;margin-top:12px">'+
+ '<div class="form">'+
+ '<div><div class="label">Datum</div><input id="ocrDate" type="date"></div>'+
+ '<div><div class="label">Beschreibung</div><input id="ocrDesc" type="text"></div>'+
+ '<div><div class="label">Ausgabeart</div><select id="ocrCat">'+categories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
+ '<div><div class="label">Betrag</div><input id="ocrAmt" type="number" min="0" step="0.01"></div>'+
+ '<button class="blue" id="addOcrExpense">✓ Übernehmen</button>'+
+ '</div>'+
+ '<details style="margin-top:10px"><summary class="muted">Erkannten Bontext anzeigen</summary><pre id="ocrText" class="ocr"></pre></details>'+
+ '</div></div>'+
+ '<div class="card"><h2>📝 Tatsächliche variable Ausgaben</h2>'+
+ '<div class="form">'+
+ '<div><div class="label">Datum</div><input id="vdate" type="date"></div>'+
+ '<div><div class="label">Beschreibung</div><input id="vdesc" type="text" placeholder="z. B. Wocheneinkauf"></div>'+
+ '<div><div class="label">Ausgabeart</div><select id="vcat">'+categories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
+ '<div><div class="label">Betrag</div><input id="vamt" type="number" min="0" step="0.01" placeholder="0,00"></div>'+
+ '<button class="blue" id="addExpense">+ Eintragen</button></div>'+
+ '<div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Datum</th><th>Beschreibung</th><th>Ausgabeart</th><th>Betrag</th><th></th></tr></thead><tbody id="expenseRows"></tbody></table></div>'+
+ '</div>';
+
+ renderIncomeMonth();
+ renderFixedMonth();
+ renderExpensesMonth();
+ updateMonth();
+}
+
+function renderIncomeMonth(){
+ const body=document.getElementById("incomeRows"),m=current;body.innerHTML="";
+ incomeNames.forEach(name=>{
+  const tr=document.createElement("tr");
+  const td=document.createElement("td");td.textContent=name;tr.appendChild(td);
+  const cell=document.createElement("td");
+  const wrap=document.createElement("div");wrap.className="income";
+  const minus=document.createElement("button");minus.textContent="−";
+  const input=document.createElement("input");input.type="number";input.step="10";input.value=Number(data[m].income[name]).toFixed(2);
+  const euroSign=document.createElement("span");euroSign.textContent=" €";
+  const plus=document.createElement("button");plus.textContent="+";
+  function change(delta){
+   data[m].income[name]=Math.max(0,(Number(input.value)||0)+delta);
+   input.value=data[m].income[name].toFixed(2);updateMonth();save(false);
+  }
+  minus.onclick=()=>change(-100);plus.onclick=()=>change(100);
+  input.oninput=()=>{data[m].income[name]=Math.max(0,Number(input.value)||0);updateMonth();save(false)};
+  wrap.append(minus,input,euroSign,plus);cell.appendChild(wrap);tr.appendChild(cell);body.appendChild(tr);
+ });
+ const tr=document.createElement("tr");tr.className="total";tr.id="incomeTotalRow";
+ tr.innerHTML="<td>Summe Einnahmen</td><td class='money' id='incomeTotalCell'>"+euro(incomeTotal(m))+"</td>";
+ body.appendChild(tr);
+}
+
+function renderFixedMonth(){
+ const body=document.getElementById("fixedRows"),m=current;body.innerHTML="";
+ const items=fixed.map(x=>({name:x[0],amount:x[1],key:"f:"+x[0]}));
+ Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({name:name,amount:arr[m],key:"s:"+name})});
+ items.forEach(item=>{
+  const tr=document.createElement("tr");
+  const check=document.createElement("td");check.style.textAlign="left";
+  const cb=document.createElement("input");cb.type="checkbox";cb.checked=!!paid[m][item.key];
+  cb.onchange=()=>{paid[m][item.key]=cb.checked;save(false);renderMonth()};
+  check.appendChild(cb);tr.appendChild(check);
+  const name=document.createElement("td");name.textContent=item.name;tr.appendChild(name);
+  const amount=document.createElement("td");amount.className="money";amount.textContent=euro(item.amount);tr.appendChild(amount);
+  body.appendChild(tr);
+ });
+ const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
+ const open=fixedTotal(m)-paidAmount;
+ const tr=document.createElement("tr");tr.className="total";
+ tr.innerHTML="<td></td><td>Fix + Sonderkosten</td><td class='money'>"+euro(fixedTotal(m))+"</td>";body.appendChild(tr);
+ const p=document.getElementById("paidFixed"),o=document.getElementById("openFixed"),f=document.getElementById("freeAfterPaid");
+ if(p)p.textContent=euro(paidAmount);if(o)o.textContent=euro(open);
+ const fixedStat=document.getElementById("fixedTotalStat");if(fixedStat)fixedStat.textContent=euro(fixedTotal(m));
+ const v=incomeTotal(m)-paidAmount-variableTotal(m);if(f){f.textContent=euro(v);f.className=v<0?"negative":"positive";}
+}
+
+function renderExpensesMonth(){
+ const body=document.getElementById("expenseRows"),m=current;body.innerHTML="";
+ if(!data[m].expenses.length){
+  body.innerHTML='<tr><td colspan="5" class="muted">Noch keine variablen Ausgaben eingetragen.</td></tr>';
+ }else{
+  data[m].expenses.forEach((e,i)=>{
+   const tr=document.createElement("tr");
+   tr.innerHTML="<td>"+escapeHtml(e.date)+"</td><td>"+escapeHtml(e.desc)+"</td><td>"+escapeHtml(e.cat)+"</td><td class='money negative'>-"+euro(e.amount)+"</td><td></td>";
+   const b=document.createElement("button");b.className="red";b.textContent="Löschen";
+   b.onclick=()=>{data[m].expenses.splice(i,1);save(false);renderMonth()};
+   tr.lastElementChild.appendChild(b);body.appendChild(tr);
+  });
+ }
+ const total=document.createElement("tr");total.className="total";
+ total.innerHTML="<td colspan='3'>Summe variable Ausgaben</td><td class='money'>"+euro(variableTotal(m))+"</td><td></td>";body.appendChild(total);
+ document.getElementById("addExpense").onclick=()=>{
+  const date=document.getElementById("vdate").value;
+  const desc=document.getElementById("vdesc").value.trim();
+  const cat=document.getElementById("vcat").value;
+  const amount=Number(document.getElementById("vamt").value);
+  if(!date||!desc||!Number.isFinite(amount)||amount<=0){setStatus("Bitte Datum, Beschreibung und Betrag eingeben.");return}
+  data[m].expenses.push({date,desc,cat,amount:Math.round(amount*100)/100});
+  save(false);renderMonth();setStatus("✓ Ausgabe eingetragen – verfügbare Summe aktualisiert.");
+ };
+}
+
+function updateMonth(){
+ const m=current,totalIncome=incomeTotal(m),variable=variableTotal(m);
+ document.getElementById("mi").textContent=euro(totalIncome);
+ document.getElementById("plannedFixed").textContent=euro(fixedTotal(m));
+ const planned=totalIncome-fixedTotal(m)-variable;
+ const plannedEl=document.getElementById("plannedFree");
+ if(plannedEl){plannedEl.textContent=euro(planned);plannedEl.className=planned<0?"negative":"positive";}
+ const items=fixed.map(x=>({amount:x[1],key:"f:"+x[0]}));
+ Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
+ const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
+ const available=totalIncome-paidAmount-variable;
+ const el=document.getElementById("available");
+ if(el){el.textContent=euro(available);el.className=available<0?"negative":"positive";}
+ const p=document.getElementById("paidFixed"),o=document.getElementById("openFixed"),f=document.getElementById("freeAfterPaid");
+ if(p)p.textContent=euro(paidAmount);if(o)o.textContent=euro(fixedTotal(m)-paidAmount);
+ if(f){f.textContent=euro(available);f.className=available<0?"negative":"positive";}
+ const incomeCell=document.getElementById("incomeTotalCell");if(incomeCell)incomeCell.textContent=euro(totalIncome);
+}
+
+
+function normalizeMerchant(text){
+ const t=text.toLowerCase();
+ const map=[
+  [/\baldi\b/,"Aldi"],[/amazon/,"Amazon"],[/(bäcker|baecker|backerei|bäckerei)/,"Bäcker"],
+  [/\bcombi\b/,"Combi"],[/(edeka|e\s*deka)/,"EDEKA"],[/(friseur|haarsalon|hair)/,"Friseur"],
+  [/\bklarna\b/,"Klarna"],[/lidl/,"Lidl"],[/(müller|mueller)/,"Müller"],[/netto/,"Netto"],
+  [/(paypal|pay\s*pal)/,"PayPal"],[/rewe/,"REWE"],[/(restaurant|gaststätte|gasthaus)/,"Restaurant"],
+  [/rossmann/,"Rossmann"],[/temu/,"TEMU"],[/\bdm\b/,"dm"]
+ ];
+ for(const [rx,label] of map) if(rx.test(t)) return label;
+ return "Sonstige";
+}
+function parseGermanNumber(s){
+ s=String(s).replace(/\s/g,"").replace(/[€EUR]/gi,"");
+ if(s.includes(",") && s.includes(".")) s=s.replace(/\./g,"").replace(",",".");
+ else if(s.includes(",")) s=s.replace(",",".");
+ const n=Number(s); return Number.isFinite(n)?n:0;
+}
+function extractReceiptData(text){
+ const lines=text.split(/\r?\n/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+ const cat=normalizeMerchant(text);
+ const dm=text.match(/\b(0?[1-9]|[12]\d|3[01])[\.\-\/](0?[1-9]|1[0-2])[\.\-\/](20\d{2}|\d{2})\b/);
+ let date="";
+ if(dm){let y=dm[3];if(y.length===2)y="20"+y;date=y+"-"+String(dm[2]).padStart(2,"0")+"-"+String(dm[1]).padStart(2,"0");}
+ const moneyRe=/(\d{1,6}(?:[.,]\d{2}))/g;
+ const totalWords=/(gesamt|summe|endbetrag|zu\s*zahl|zahlbetrag|total|grand\s*total|brutto)/i;
+ let amount=0,bestScore=-1;
+ for(const line of lines){
+  const vals=[...line.matchAll(moneyRe)].map(m=>parseGermanNumber(m[1])).filter(v=>v>0&&v<10000);
+  if(!vals.length)continue;
+  let score=totalWords.test(line)?10:0;
+  if(/(karte|bar|ec|giro|visa|master)/i.test(line))score+=2;
+  if(vals.length===1)score+=1;
+  if(score>bestScore){bestScore=score;amount=vals[vals.length-1];}
+ }
+ if(!amount){
+  const vals=[...text.matchAll(moneyRe)].map(m=>parseGermanNumber(m[1])).filter(v=>v>0&&v<10000);
+  if(vals.length)amount=Math.max(...vals);
+ }
+ return {date,desc:cat==="Sonstige"?"Bon":cat,cat,amount:amount||""};
+}
+async function loadImageForOCR(file){
+ const url=URL.createObjectURL(file);
+ try{
+  const img=new Image();img.src=url;
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
+  const scale=Math.min(2.5,Math.max(1.5,1800/img.width));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+  const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+  for(let i=0;i<image.data.length;i+=4){
+   const r=image.data[i],g=image.data[i+1],b=image.data[i+2];
+   let gray=(0.299*r+0.587*g+0.114*b-128)*1.65+128;
+   gray=Math.max(0,Math.min(255,gray));
+   image.data[i]=image.data[i+1]=image.data[i+2]=gray;
+  }
+  ctx.putImageData(image,0,0);return canvas;
+ }finally{URL.revokeObjectURL(url)}
+}
+async function recognizeReceipt(file,status){
+ const canvas=await loadImageForOCR(file);
+ let texts=[];
+ for(const psm of [6,11]){
+  status.textContent="⏳ Bon wird ausgelesen …";
+  const result=await Tesseract.recognize(canvas,"deu+eng",{
+   logger:m=>{if(m.status==="recognizing text"&&m.progress)status.textContent="⏳ Bon wird ausgelesen … "+Math.round(m.progress*100)+" %";},
+   tessedit_pageseg_mode:psm
+  });
+  texts.push(result.data.text||"");
+ }
+ return texts.join("\n");
+}
+
+function escapeHtml(v){
+ return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+}
+
+function save(show=true){
+ localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));
+ if(show)setStatus("✓ Gespeichert");
+}
+
+function load(){
+ try{
+  const raw=localStorage.getItem("budget2026_data");
+  if(!raw)return;
+  const saved=JSON.parse(raw);
+  if(saved&&Array.isArray(saved.data)){
+   data=saved.data.map((d,i)=>({
+    income:{...incomesDefault(i),...(d.income||{})},
+    expenses:Array.isArray(d.expenses)?d.expenses:[]
+   }));
+   paid=Array.isArray(saved.paid)&&saved.paid.length===12?saved.paid.map(x=>x||{}):Array.from({length:12},()=>({}));
+  }else if(Array.isArray(saved)&&saved.length===12){
+   data=saved.map((d,i)=>({income:{...incomesDefault(i),...(d.income||{})},expenses:Array.isArray(d.expenses)?d.expenses:[]}));
+  }
+ }catch(e){console.error(e)}
+}
+
+function bindOCR(){
+ const scan=document.getElementById("scanReceipt");if(!scan)return;
+ scan.onclick=async()=>{
+  const file=document.getElementById("receiptFile").files[0],status=document.getElementById("ocrStatus");
+  if(!file){status.textContent="Bitte zuerst ein Bon-Foto auswählen.";return}
+  if(typeof Tesseract==="undefined"){status.textContent="OCR konnte nicht geladen werden. Bitte Internetverbindung prüfen und Seite neu laden.";return}
+  try{
+   const text=await recognizeReceipt(file,status),r=extractReceiptData(text);
+   document.getElementById("ocrDate").value=r.date;
+   document.getElementById("ocrDesc").value=r.desc;
+   document.getElementById("ocrCat").value=r.cat;
+   document.getElementById("ocrAmt").value=r.amount;
+   document.getElementById("ocrText").textContent=text;
+   document.getElementById("ocrPreview").style.display="block";
+   status.textContent=(r.amount&&r.date)?"✓ Bon erkannt – bitte Angaben prüfen.":"⚠️ Bon gelesen, einzelne Angaben bitte ergänzen.";
+  }catch(e){console.error(e);status.textContent="❌ OCR fehlgeschlagen. Bitte ein scharfes, gerades und gut beleuchtetes Foto verwenden."}
+ };
+ document.getElementById("addOcrExpense").onclick=()=>{
+  const date=document.getElementById("ocrDate").value,desc=document.getElementById("ocrDesc").value.trim();
+  const cat=document.getElementById("ocrCat").value,amount=Number(document.getElementById("ocrAmt").value);
+  if(!date||!desc||!Number.isFinite(amount)||amount<=0){document.getElementById("ocrStatus").textContent="Bitte Datum, Beschreibung und Betrag prüfen.";return}
+  data[current].expenses.push({date,desc,cat,amount:Math.round(amount*100)/100});
+  save(false);renderMonth();bindOCR();setStatus("✓ Bon-Ausgabe eingetragen – verfügbare Summe aktualisiert.");
+ };
+}
+document.getElementById("save").onclick=()=>save(true);
+document.getElementById("load").onclick=()=>{load();render();setStatus("✓ Gespeicherte Daten geladen")};
+document.getElementById("reset").onclick=()=>{
+ if(!confirm("Alle variablen Ausgaben löschen? Einnahmen und Fixkosten bleiben erhalten."))return;
+ data.forEach(d=>d.expenses=[]);paid=Array.from({length:12},()=>({}));save(false);render();setStatus("✓ Variable Ausgaben und Häkchen gelöscht");
+};
+document.getElementById("csv").onclick=()=>{
+ const rows=[["Monat","Typ","Posten","Datum","Kategorie","Betrag"]];
+ months.forEach((month,m)=>{
+  incomeNames.forEach(n=>rows.push([month,"Einnahme",n,"","",data[m].income[n]]));
+  fixed.forEach(x=>rows.push([month,"Fixkosten",x[0],"","",x[1]]));
+  Object.entries(special).forEach(([n,a])=>{if(a[m])rows.push([month,"Sonderkosten",n,"","",a[m]])});
+  data[m].expenses.forEach(e=>rows.push([month,"Variable Ausgabe",e.desc,e.date,e.cat,e.amount]));
+ });
+ const csv=rows.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(";")).join("\n");
+ const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Mein_Budget_2026.csv";a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+
+function render(){
+ renderTabs();
+ if(current===-1)renderYear();else{renderMonth();bindOCR()}
+}
+load();
+render();
+</script>
+</body>
+</html>
