@@ -37,7 +37,8 @@ th{background:#f8fafc;text-align:right}th:first-child,td:first-child{text-align:
 pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #dfe3e8;max-height:220px;overflow:auto}
 @media(max-width:800px){
  .wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}
- .form{grid-template-columns:1fr 1fr}.receipt-grid{grid-template-columns:1fr}
+ .form{grid-template-columns:1fr}.form>div,.form button{width:100%;min-width:0}.form input,.form select{width:100%;min-width:0;max-width:100%;appearance:auto;-webkit-appearance:auto}
+ .receipt-grid{grid-template-columns:1fr}
 }
 
 .cloud-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cloud-grid input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}.cloud-wide{grid-column:1/-1}.cloud-user{font-weight:700}.cloud-ok{color:#047857;font-weight:700}.cloud-warn{color:#b45309;font-weight:700}@media(max-width:800px){.cloud-grid{grid-template-columns:1fr}}
