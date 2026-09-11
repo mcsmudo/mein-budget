@@ -30,7 +30,7 @@ th{background:#f8fafc;text-align:right}th:first-child,td:first-child{text-align:
 .income input{width:90px;padding:6px;border:1px solid #cbd5e1;border-radius:7px;text-align:right}
 .income button{width:30px;height:30px;padding:0;background:#e5e7eb;font-size:18px}
 .form{display:grid;grid-template-columns:130px 1fr 180px 130px auto;gap:8px;align-items:end}
-.form input,.form select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}
+.form>div{min-width:0}.form input,.form select{width:100%;max-width:100%;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font:inherit;box-sizing:border-box}
 .label{font-size:12px;color:#6b7280;margin-bottom:4px}
 .status{font-size:12px;color:#047857;min-height:18px;margin-top:7px}
 .receipt-grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
