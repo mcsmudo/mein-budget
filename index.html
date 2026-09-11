@@ -595,6 +595,13 @@ async function checkCloudUpdates(){
   if(!lastCloudUpdatedAt||new Date(row.updated_at)>new Date(lastCloudUpdatedAt)){const cd=row.data||{};if(cd&&cd.years){allYears=cd.years;fixedByYear=cd.fixedByYear&&typeof cd.fixedByYear==="object"?cd.fixedByYear:fixedByYear;specialByYear=cd.specialByYear&&typeof cd.specialByYear==="object"?cd.specialByYear:specialByYear;reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;}else if(Array.isArray(cd))allYears={"2026":cd};else if(cd&&typeof cd==="object")allYears=cd;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:allPaid;normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("↻ Cloud-Änderung übernommen");}
  }catch(e){console.warn("Cloud polling",e)}
 }
+function setCloudStatus(text,cls=""){
+ const el=document.getElementById("cloudStatus");
+ const compact=document.getElementById("cloudCompactStatus");
+ if(el){el.textContent=text;el.className="status "+cls;}
+ if(compact){compact.textContent=text;compact.className=cls||"";}
+}
+
 function updateCloudUser(user){
  sbUser=user||null;
  const login=document.getElementById("sbLogin"),signup=document.getElementById("sbSignup"),logout=document.getElementById("sbLogout"),u=document.getElementById("cloudUser");
