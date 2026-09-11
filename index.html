@@ -24,10 +24,10 @@ table{border-collapse:collapse;width:100%;min-width:700px}
 th,td{padding:8px 7px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
 th{background:#f8fafc;text-align:right}th:first-child,td:first-child{text-align:left}
 .section td{background:#eef2f7!important;font-weight:800}.total td{background:#f8fafc!important;font-weight:800}
-.positive{color:#047857;font-weight:800}.negative{color:#b91c1c;font-weight:800}
+.positive{color:#047857;font-weight:800}.negative{color:#b91c1c;font-weight:800}.danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:5px 8px;border-radius:7px;font-size:12px;font-weight:700}.reserve-history th:nth-child(5),.reserve-history td:nth-child(5){width:15%;text-align:center}
 .money{font-variant-numeric:tabular-nums;white-space:nowrap}
 .income{display:flex;align-items:center;justify-content:flex-end;gap:4px}
-.income input{width:90px;padding:6px;border:1px solid #cbd5e1;border-radius:7px;text-align:right}
+.income input{width:90px;padding:6px;border:1px solid #cbd5e1;border-radius:7px;text-align:right}.special-amount input{background:#f8fafc;color:#111827;cursor:default}
 .income button{width:30px;height:30px;padding:0;background:#e5e7eb;font-size:18px}
 .form{display:grid;grid-template-columns:130px 1fr 180px 130px auto;gap:8px;align-items:end}
 .form>div{min-width:0}.form input,.form select{width:100%;max-width:100%;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font:inherit;box-sizing:border-box}
@@ -43,6 +43,7 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 }
 
 .cloud-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cloud-grid input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}.cloud-wide{grid-column:1/-1}.cloud-user{font-weight:700}.cloud-ok{color:#047857;font-weight:700}.cloud-warn{color:#b45309;font-weight:700}@media(max-width:800px){.cloud-grid{grid-template-columns:1fr}}
+.analysis-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:15px}.analysis-tab{background:#e5e7eb;border:1px solid #dfe3e8;white-space:nowrap}.analysis-tab.active{background:#fff;color:#2563eb}.analysis-note{padding:11px 13px;border-radius:9px;background:#f8fafc;border:1px solid #dfe3e8;margin-bottom:12px}.analysis-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.analysis-list{margin:0;padding-left:20px}.bar{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden}.bar>span{display:block;height:100%;background:#2563eb}.tag{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700}.warnbox{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:12px}.goodbox{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:9px;padding:12px}.analysis-table{min-width:620px;table-layout:fixed}.analysis-table th,.analysis-table td{white-space:nowrap}.analysis-table th:nth-child(1),.analysis-table td:nth-child(1){width:21%;text-align:left}.analysis-table th:nth-child(2),.analysis-table td:nth-child(2){width:20%;text-align:right}.analysis-table th:nth-child(3),.analysis-table td:nth-child(3){width:22%;text-align:right}.analysis-table th:nth-child(4),.analysis-table td:nth-child(4){width:17%;text-align:right}.analysis-table th:nth-child(5),.analysis-table td:nth-child(5){width:20%;text-align:right}.reserve-form{display:grid;grid-template-columns:140px minmax(210px,1fr) minmax(210px,1fr) auto;gap:8px;align-items:end}.reserve-form>div{min-width:0}.reserve-form input,.reserve-form select{width:100%;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font:inherit;box-sizing:border-box}.reserve-history{margin-top:12px}.reserve-history table{min-width:620px;table-layout:fixed}.reserve-history th,.reserve-history td{white-space:nowrap}.reserve-history th:nth-child(1),.reserve-history td:nth-child(1){width:18%;text-align:left}.reserve-history th:nth-child(2),.reserve-history td:nth-child(2){width:28%;text-align:left}.reserve-history th:nth-child(3),.reserve-history td:nth-child(3){width:18%;text-align:right}.reserve-history th:nth-child(4),.reserve-history td:nth-child(4){width:36%;text-align:left}@media(max-width:800px){.analysis-grid{grid-template-columns:1fr 1fr}.reserve-form{grid-template-columns:1fr}.analysis-table{min-width:620px}.reserve-history table{min-width:620px}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -89,7 +90,7 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 <div class="muted" id="cloudUser"></div>
 </div>
 </div>
-<div class="tabs" id="tabs"></div>
+<div class="analysis-nav" id="mainNav"><button class="analysis-tab active" id="navBudget">💰 Budgetübersicht</button><button class="analysis-tab" id="navAnalysis">🔎 Finanzanalyse</button></div><div class="tabs" id="tabs"></div>
 <div id="app"></div>
 </div>
 
@@ -124,8 +125,22 @@ const special={
  "Hausrat":[149.10,0,0,0,0,0,149.10,0,0,0,0,0],
  "Brandkasse":[0,0,279.54,0,0,0,0,0,0,0,0,0]
 };
+let specialByYear={};
+function ensureSpecialYear(year){
+ const y=String(year);
+ if(!specialByYear[y]||typeof specialByYear[y]!=="object") specialByYear[y]={};
+ Object.entries(special).forEach(([name,defaults])=>{
+  if(!Array.isArray(specialByYear[y][name])||specialByYear[y][name].length!==12) specialByYear[y][name]=defaults.map(v=>Number(v)||0);
+  else specialByYear[y][name]=specialByYear[y][name].map(v=>Math.max(0,Number(v)||0));
+ });
+ return specialByYear[y];
+}
+function specialValues(m,year=selectedYear){return ensureSpecialYear(year);}
+function specialTotal(m,year=selectedYear){const vals=specialValues(m,year);return Object.values(vals).reduce((sum,arr)=>sum+(Number(arr[m])||0),0)}
 
-const categories=["Aldi","Amazon","Bäcker","Bankkarte","Combi","dm","EDEKA","Friseur","Klarna","Lidl","Müller","Netto","PayPal","REWE","Restaurant","Rossmann","Sonstige","TEMU"];
+const merchantCategories=["Aldi","Amazon","Bäcker","Bankkarte","Combi","dm","EDEKA","Friseur","Klarna","Lidl","Müller","Netto","PayPal","REWE","Restaurant","Rossmann","Sonstige","TEMU"];
+const analysisCategories=["Lebensmittel","Online-Shopping","Einkaufen","Drogerie","Restaurant","Sonstiges","Auto","Autoreparatur","Reparatur / Anschaffung","Familie","Freizeit","Außergewöhnlich"];
+const categories=merchantCategories;
 
 const scheduled={
  "Trainergeld":[300,0,0,300,0,0,300,0,0,300,0,0],
@@ -160,7 +175,52 @@ let sbUser=null;
 let lastCloudUpdatedAt=null;
 let cloudPollTimer=null;
 let cloudWriteTimer=null;
+let cloudLoaded=false;
+let mainView="budget";
+let reserve={minimum:5000,balance:5000,transactions:[]};
 
+function normalizeExpense(e){const x={...e};if(!x.cat)x.cat="Sonstige";if(!x.analysisCat)x.analysisCat=inferAnalysisCategory(x.desc||"",x.cat);return x;}
+function inferAnalysisCategory(desc,cat){const t=(String(desc)+" "+String(cat)).toLowerCase();if(/aldi|combi|edeka|lidl|netto|rewe|lebensmittel|wochen.*einkauf/.test(t))return "Lebensmittel";if(/amazon|temu|klarna|online|shop/.test(t))return "Online-Shopping";if(/dm|rossmann|drogerie|müller/.test(t))return "Drogerie";if(/restaurant|gaststätte|gasthaus|essen gehen/.test(t))return "Restaurant";if(/auto|kfz|reifen|tanken|tankstelle/.test(t))return "Auto";if(/reparatur|waschmaschine|defekt|handwerker/.test(t))return "Reparatur / Anschaffung";if(/kind|familie|finn|lian/.test(t))return "Familie";if(/sport|kino|freizeit|verein/.test(t))return "Freizeit";return "Sonstiges";}
+function normalizeAllExpenses(){Object.values(allYears).forEach(yd=>{if(Array.isArray(yd))yd.forEach(d=>{if(d&&Array.isArray(d.expenses))d.expenses=d.expenses.map(normalizeExpense);});});}
+function normalizeReserve(){reserve=reserve&&typeof reserve==="object"?reserve:{minimum:5000,balance:5000,transactions:[]};reserve.minimum=5000;if(reserve.balance===null||reserve.balance===undefined||!Number.isFinite(Number(reserve.balance)))reserve.balance=5000;else reserve.balance=Math.max(0,Number(reserve.balance));if(!Array.isArray(reserve.transactions))reserve.transactions=[];reserve.transactions=reserve.transactions.map(x=>({...x,amount:Math.abs(Number(x.amount)||0),direction:x.direction==="in"?"in":"out",reason:String(x.reason||"")}));if(!reserve.initialBalanceSet){reserve.balance=5000;reserve.initialBalanceSet=true;}}
+function reserveBalance(){return Number.isFinite(Number(reserve.balance))?Number(reserve.balance):5000}
+function reserveShortfall(){return reserveBalance()===null?null:Math.max(0,reserve.minimum-reserveBalance());}
+function reserveNetForMonth(m,year=selectedYear){return reserve.transactions.filter(t=>Number(t.year)===Number(year)&&Number(t.month)===Number(m)).reduce((s,t)=>s+(t.direction==="out"?Number(t.amount)||0:-(Number(t.amount)||0)),0);}
+function reserveTransfer(monthIndex,amount,direction,reason,date){
+ amount=Math.round(Math.abs(Number(amount)||0)*100)/100;
+ reason=String(reason||"").trim();
+ if(!amount||!reason)return false;
+ if(direction!=="in"&&direction!=="out")return false;
+ const current=reserveBalance();
+ // in = Girokonto -> Reserve: Reserve steigt.
+ // out = Reserve -> Girokonto: Reserve sinkt.
+ if(direction==="out"&&amount>current)return false;
+ if(current===null){
+   if(direction==="out")return false;
+   reserve.balance=5000;
+ }
+ if(direction==="in"){ 
+   reserve.balance=Math.round((current+amount)*100)/100;
+ }else{
+   reserve.balance=Math.round((current-amount)*100)/100;
+ }
+ reserve.transactions.push({date:date||new Date().toISOString().slice(0,10),amount,direction,reason,year:Number(selectedYear),month:Number(monthIndex)});
+ return true;
+}
+function deleteReserveTransaction(index){
+ const tx=reserve.transactions[index];
+ if(!tx)return false;
+ const current=reserveBalance();
+ if(current!==null){
+   // Beim Löschen wird genau die Wirkung dieser Buchung zurückgenommen.
+   reserve.balance=tx.direction==="in"
+     ?Math.round((current-Number(tx.amount))*100)/100
+     :Math.round((current+Number(tx.amount))*100)/100;
+   if(reserve.balance<0 && Math.abs(reserve.balance)<0.005) reserve.balance=0;
+ }
+ reserve.transactions.splice(index,1);
+ return true;
+}
 function ensureYear(year){
  const y=String(year);
  if(!Array.isArray(allYears[y])) allYears[y]=makeData(Number(y));
@@ -187,7 +247,6 @@ function updateAppTitle(){
 const euro=n=>Number(n||0).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
 
 function incomeTotal(m){return incomeNames.reduce((sum,name)=>sum+(Number(data[m].income[name])||0),0)}
-function specialTotal(m){return Object.values(special).reduce((sum,arr)=>sum+(Number(arr[m])||0),0)}
 function fixedTotal(m){return fixedMonthly(m)+specialTotal(m)}
 function variableTotal(m){return data[m].expenses.reduce((sum,e)=>sum+(Number(e.amount)||0),0)}
 function balance(m){return incomeTotal(m)-fixedTotal(m)-variableTotal(m)}
@@ -230,9 +289,10 @@ function renderMonth(){
  '<div class="stat"><small>Geplant übrig</small><strong id="plannedFree"></strong></div>'+
  '<div class="stat"><small>Aktuell noch verfügbar</small><strong id="available"></strong></div>'+
  '</div></div>'+
+ '<div class="card"><h2>🧯 Reserve</h2><div class="muted">Sicherheitsboden: 5.000 €. Reservebewegungen sind keine Einnahmen.</div><div class="cards" style="margin-top:10px"><div class="stat"><small>Aktuelle Reserve</small><strong id="reserveMonthBalance">'+euro(reserveBalance())+'</strong></div><div class="stat"><small>Reserve → Giro in diesem Monat</small><strong>'+euro(Math.max(0,reserveNetForMonth(m)))+'</strong></div><div class="stat"><small>Nach Mindestreserve fehlen</small><strong class="'+(reserveShortfall()!==null&&reserveShortfall()>0?'negative':'positive')+'">'+euro(reserveShortfall())+'</strong></div></div>'+(reserveShortfall()!==null&&reserveShortfall()>0?'<div class="warnbox" style="margin-top:10px">⚠️ Reserve liegt unter dem Sicherheitsboden. Die Finanzanalyse plant die Auffüllung separat.</div>':'')+'</div>'+
  '<div class="card"><h2>💰 Einnahmen</h2><div class="tablewrap"><table><thead><tr><th>Einnahme</th><th>Betrag</th></tr></thead><tbody id="incomeRows"></tbody></table></div></div>'+
  '<div class="card"><h2>🔒 Fixkosten</h2>'+
- '<div class="muted" style="margin-bottom:10px">Die Fixkosten bleiben vollständig im Budget. Mit dem Häkchen markierst du nur, dass die Abbuchung bereits erfolgt ist.</div>'+
+ '<div class="muted" style="margin-bottom:10px">Die Fixkosten bleiben vollständig im Budget. Mit dem Häkchen markierst du nur, dass die Abbuchung bereits erfolgt ist. Auch Sonderkosten lassen sich jetzt mit − / + und direkt im Feld anpassen.</div>'+
  '<div class="tablewrap"><table><thead><tr><th>✓ bezahlt</th><th>Posten</th><th>Betrag</th></tr></thead><tbody id="fixedRows"></tbody></table></div>'+
  '<div style="margin-top:12px" class="cards">'+
  '<div class="stat"><small>Fixkosten gesamt</small><strong id="fixedTotalStat"></strong></div>'+
@@ -249,7 +309,7 @@ function renderMonth(){
  '<div class="form">'+
  '<div><div class="label">Datum</div><input id="ocrDate" type="date"></div>'+
  '<div><div class="label">Beschreibung</div><input id="ocrDesc" type="text"></div>'+
- '<div><div class="label">Ausgabeart</div><select id="ocrCat">'+categories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
+ '<div><div class="label">Händler / Ausgabeart</div><select id="ocrCat">'+categories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+ '<div><div class="label">Analyse-Kategorie</div><select id="ocrAnalysisCat">'+analysisCategories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
  '<div><div class="label">Betrag</div><input id="ocrAmt" type="number" min="0" step="0.01"></div>'+
  '<button class="blue" id="addOcrExpense">✓ Übernehmen</button>'+
  '</div>'+
@@ -259,10 +319,10 @@ function renderMonth(){
  '<div class="form">'+
  '<div><div class="label">Datum</div><input id="vdate" type="date"></div>'+
  '<div><div class="label">Beschreibung</div><input id="vdesc" type="text" placeholder="z. B. Wocheneinkauf"></div>'+
- '<div><div class="label">Ausgabeart</div><select id="vcat">'+categories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
+ '<div><div class="label">Händler / Ausgabeart</div><select id="vcat">'+categories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+ '<div><div class="label">Analyse-Kategorie</div><select id="vanalysisCat">'+analysisCategories.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
  '<div><div class="label">Betrag</div><input id="vamt" type="number" min="0" step="0.01" placeholder="0,00"></div>'+
  '<button class="blue" id="addExpense">+ Eintragen</button></div>'+
- '<div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Datum</th><th>Beschreibung</th><th>Ausgabeart</th><th>Betrag</th><th></th></tr></thead><tbody id="expenseRows"></tbody></table></div>'+
+ '<div class="tablewrap" style="margin-top:14px"><table><thead><tr><th>Datum</th><th>Beschreibung</th><th>Händler / Ausgabeart</th><th>Analyse</th><th>Betrag</th><th></th></tr></thead><tbody id="expenseRows"></tbody></table></div>'+
  '</div>';
 
  renderIncomeMonth();
@@ -298,8 +358,9 @@ function renderIncomeMonth(){
 function renderFixedMonth(){
  const body=document.getElementById("fixedRows"),m=current;body.innerHTML="";
  const values=fixedValues(m);
+ const svalues=specialValues(m);
  const items=fixed.map((x,i)=>({name:x[0],amount:Number(values[i])||0,key:"f:"+x[0],idx:i}));
- Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({name,amount:arr[m],key:"s:"+name});});
+ Object.entries(svalues).forEach(([name,arr])=>{if(Number(arr[m])>0||Number(special[name]?.[m])>0)items.push({name,amount:Number(arr[m])||0,key:"s:"+name,special:true});});
  items.forEach(item=>{
   const tr=document.createElement("tr");
   const check=document.createElement("td");check.style.textAlign="left";
@@ -321,7 +382,22 @@ function renderFixedMonth(){
    minus.onclick=()=>change(-0.01);plus.onclick=()=>change(0.01);
    input.oninput=()=>{fixedValues(m)[item.idx]=Math.max(0,Math.round((Number(input.value)||0)*100)/100);updateMonth();save(false)};
    wrap.append(minus,input,euroSign,plus);amount.appendChild(wrap);
-  }else amount.textContent=euro(item.amount);
+  }else{
+   const wrap=document.createElement("div");wrap.className="income";
+   const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";
+   const input=document.createElement("input");input.type="number";input.step="0.01";input.min="0";input.value=item.amount.toFixed(2);
+   const euroSign=document.createElement("span");euroSign.textContent=" €";
+   const plus=document.createElement("button");plus.textContent="+";plus.title="1 Cent hinzufügen";
+   const svalues=specialValues(m);
+   function change(delta){
+    const next=Math.max(0,Math.round(((Number(input.value)||0)+delta)*100)/100);
+    svalues[item.name][m]=next;input.value=next.toFixed(2);updateMonth();save(false);
+    renderFixedMonth();
+   }
+   minus.onclick=()=>change(-0.01);plus.onclick=()=>change(0.01);
+   input.oninput=()=>{svalues[item.name][m]=Math.max(0,Math.round((Number(input.value)||0)*100)/100);updateMonth();save(false)};
+   wrap.append(minus,input,euroSign,plus);amount.appendChild(wrap);
+  }
   tr.appendChild(amount);body.appendChild(tr);
  });
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
@@ -337,11 +413,11 @@ function renderFixedMonth(){
 function renderExpensesMonth(){
  const body=document.getElementById("expenseRows"),m=current;body.innerHTML="";
  if(!data[m].expenses.length){
-  body.innerHTML='<tr><td colspan="5" class="muted">Noch keine variablen Ausgaben eingetragen.</td></tr>';
+  body.innerHTML='<tr><td colspan="6" class="muted">Noch keine variablen Ausgaben eingetragen.</td></tr>';
  }else{
   data[m].expenses.forEach((e,i)=>{
    const tr=document.createElement("tr");
-   tr.innerHTML="<td>"+escapeHtml(e.date)+"</td><td>"+escapeHtml(e.desc)+"</td><td>"+escapeHtml(e.cat)+"</td><td class='money negative'>-"+euro(e.amount)+"</td><td></td>";
+   tr.innerHTML="<td>"+escapeHtml(e.date)+"</td><td>"+escapeHtml(e.desc)+"</td><td>"+escapeHtml(e.cat)+"</td><td>"+escapeHtml(e.analysisCat||inferAnalysisCategory(e.desc,e.cat))+"</td><td class='money negative'>-"+euro(e.amount)+"</td><td></td>";
    const b=document.createElement("button");b.className="red";b.textContent="Löschen";
    b.onclick=()=>{data[m].expenses.splice(i,1);save(false);renderMonth()};
    tr.lastElementChild.appendChild(b);body.appendChild(tr);
@@ -355,7 +431,7 @@ function renderExpensesMonth(){
   const cat=document.getElementById("vcat").value;
   const amount=Number(document.getElementById("vamt").value);
   if(!date||!desc||!Number.isFinite(amount)||amount<=0){setStatus("Bitte Datum, Beschreibung und Betrag eingeben.");return}
-  data[m].expenses.push({date,desc,cat,amount:Math.round(amount*100)/100});
+  data[m].expenses.push({date,desc,cat,analysisCat:document.getElementById("vanalysisCat")?.value||inferAnalysisCategory(desc,cat),amount:Math.round(amount*100)/100});
   save(false);renderMonth();setStatus("✓ Ausgabe eingetragen – verfügbare Summe aktualisiert.");
  };
 }
@@ -369,9 +445,9 @@ function updateMonth(){
  if(plannedEl){plannedEl.textContent=euro(planned);plannedEl.className=planned<0?"negative":"positive";}
  const values=fixedValues(m);
   const items=fixed.map((x,i)=>({amount:Number(values[i])||0,key:"f:"+x[0]}));
- Object.entries(special).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
+ Object.entries(specialValues(m)).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
- const available=totalIncome-paidAmount-variable;
+ const available=totalIncome-paidAmount-variable+reserveNetForMonth(m);
  const el=document.getElementById("available");
  if(el){el.textContent=euro(available);el.className=available<0?"negative":"positive";}
  const p=document.getElementById("paidFixed"),o=document.getElementById("openFixed"),f=document.getElementById("freeAfterPaid");
@@ -464,7 +540,7 @@ function buildStore(){
  allYears[String(selectedYear)]=data;
  allPaid[String(selectedYear)]=paid;
  ensureFixedYear(selectedYear);
- return {app:"MeinBudget",formatVersion:3,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear};
+ return {app:"MeinBudget",formatVersion:5,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear,specialByYear,reserve};
 }
 function save(show=true){
  const store=buildStore();
@@ -474,10 +550,11 @@ function save(show=true){
 }
 
 async function saveCloud(){
- if(!sbClient||!sbUser)return;
+ if(!sbClient||!sbUser||!cloudLoaded)return;
  try{
   const updated=new Date().toISOString();
-  const {error}=await sbClient.from("budget_data").upsert({user_id:sbUser.id,data:allYears,paid:allPaid,updated_at:updated},{onConflict:"user_id"});
+  const cloudData={years:allYears,fixedByYear,specialByYear,reserve};
+  const {error}=await sbClient.from("budget_data").upsert({user_id:sbUser.id,data:cloudData,paid:allPaid,updated_at:updated},{onConflict:"user_id"});
   if(error)throw error;
   lastCloudUpdatedAt=updated;setStatus("✓ Mit Cloud synchronisiert");setCloudStatus("✓ Synchronisiert","cloud-ok");
  }catch(e){console.error(e);setStatus("⚠️ Lokal gespeichert – Cloud-Sync fehlgeschlagen");setCloudStatus("⚠️ Cloud-Sync fehlgeschlagen: "+(e.message||e),"cloud-warn");}
@@ -488,46 +565,21 @@ async function loadCloud(){
  try{
   const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();
   if(error)throw error;
-  if(row){
-   if(Array.isArray(row.data)){
-    allYears={"2026":row.data};
-    allPaid={"2026":Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};
-   }else if(row.data&&row.data.years){
-    allYears=row.data.years;
-    fixedByYear=(row.data.fixedByYear&&typeof row.data.fixedByYear==="object")?row.data.fixedByYear:{};
-    allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};
-   }else{
-    allYears=(row.data&&typeof row.data==="object")?row.data:{};
-    allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};
-   }
-   if(!Array.isArray(allYears[String(selectedYear)])) allYears[String(selectedYear)]=makeData(selectedYear);
-   if(!Array.isArray(allPaid[String(selectedYear)])||allPaid[String(selectedYear)].length!==12) allPaid[String(selectedYear)]=Array.from({length:12},()=>({}));
-   ensureYear(selectedYear);ensureFixedYear(selectedYear);
-   data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];
-   lastCloudUpdatedAt=row.updated_at||null;
-   localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
-   render();setStatus("✓ Cloud-Daten geladen");
-  }else{await saveCloud();}
- }catch(e){console.error(e);setStatus("⚠️ Cloud-Daten konnten nicht geladen werden");setCloudStatus("⚠️ "+(e.message||e),"cloud-warn");}
+  if(!row){cloudLoaded=false;setCloudStatus("⚠️ Keine Cloud-Daten gefunden – nichts wird automatisch hochgeladen.","cloud-warn");setStatus("⚠️ Cloud ist leer. Lokale Daten bleiben unangetastet.");return;}
+  const cd=row.data;
+  if(Array.isArray(cd)){allYears={"2026":cd.map((d,i)=>({income:{...incomesDefault(i,2026),...(d.income||{})},expenses:Array.isArray(d.expenses)?d.expenses.map(normalizeExpense):[]}))};allPaid={"2026":Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};}
+  else if(cd&&cd.years&&typeof cd.years==="object"){allYears=cd.years;fixedByYear=(cd.fixedByYear&&typeof cd.fixedByYear==="object")?cd.fixedByYear:{};specialByYear=(cd.specialByYear&&typeof cd.specialByYear==="object")?cd.specialByYear:{};reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};}
+  else if(cd&&typeof cd==="object"){allYears=cd;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};}
+  normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);if(!Array.isArray(allYears[String(selectedYear)]))allYears[String(selectedYear)]=makeData(selectedYear);if(!Array.isArray(allPaid[String(selectedYear)])||allPaid[String(selectedYear)].length!==12)allPaid[String(selectedYear)]=Array.from({length:12},()=>({}));ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at||null;cloudLoaded=true;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("✓ Cloud-Daten geladen – Bestand geschützt");setCloudStatus("✓ Synchronisiert","cloud-ok");
+ }catch(e){console.error(e);cloudLoaded=false;setStatus("⚠️ Cloud-Daten konnten nicht geladen werden – nichts überschrieben");setCloudStatus("⚠️ "+(e.message||e),"cloud-warn");}
 }
-
 async function checkCloudUpdates(){
- if(!sbClient||!sbUser)return;
+ if(!sbClient||!sbUser||!cloudLoaded)return;
  try{
-  const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();
-  if(error||!row||!row.updated_at)return;
-  if(!lastCloudUpdatedAt||new Date(row.updated_at)>new Date(lastCloudUpdatedAt)){
-   data=Array.isArray(row.data)?row.data:data;paid=Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):paid;lastCloudUpdatedAt=row.updated_at;localStorage.setItem("budget2026_data",JSON.stringify({data,paid}));render();setStatus("↻ Cloud-Änderung übernommen");
-  }
+  const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();if(error||!row||!row.updated_at)return;
+  if(!lastCloudUpdatedAt||new Date(row.updated_at)>new Date(lastCloudUpdatedAt)){const cd=row.data||{};if(cd&&cd.years){allYears=cd.years;fixedByYear=cd.fixedByYear&&typeof cd.fixedByYear==="object"?cd.fixedByYear:fixedByYear;specialByYear=cd.specialByYear&&typeof cd.specialByYear==="object"?cd.specialByYear:specialByYear;reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;}else if(Array.isArray(cd))allYears={"2026":cd};else if(cd&&typeof cd==="object")allYears=cd;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:allPaid;normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("↻ Cloud-Änderung übernommen");}
  }catch(e){console.warn("Cloud polling",e)}
 }
-
-function setCloudStatus(text,cls=""){
- const el=document.getElementById("cloudStatus");if(el){el.textContent=text;el.className="status "+cls;}
- const compact=document.getElementById("cloudCompactStatus");
- if(compact)compact.textContent=text;
-}
-
 function updateCloudUser(user){
  sbUser=user||null;
  const login=document.getElementById("sbLogin"),signup=document.getElementById("sbSignup"),logout=document.getElementById("sbLogout"),u=document.getElementById("cloudUser");
@@ -595,8 +647,10 @@ function restoreBackupFile(file){
    allYears=saved.years;
    allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
    fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
+   specialByYear=(saved.specialByYear&&typeof saved.specialByYear==="object")?saved.specialByYear:{};
+   reserve=saved.reserve&&typeof saved.reserve==="object"?saved.reserve:reserve;
    selectedYear=Number(saved.currentYear)||2026;
-   ensureYear(selectedYear);ensureFixedYear(selectedYear);
+   ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);
    localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
    render();updateAppTitle();
    if(sbUser){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
@@ -615,8 +669,10 @@ function load(){
    allYears=saved.years;
    allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
    fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
+   specialByYear=(saved.specialByYear&&typeof saved.specialByYear==="object")?saved.specialByYear:{};
+   reserve=saved.reserve&&typeof saved.reserve==="object"?saved.reserve:reserve;
    selectedYear=Number(saved.currentYear)||2026;
-   ensureYear(selectedYear);ensureFixedYear(selectedYear);
+   ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);
   }else if(saved&&saved.years&&typeof saved.years==="object"){
    allYears=saved.years;
    allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
@@ -631,6 +687,7 @@ function load(){
    allPaid={"2026":Array.from({length:12},()=>({}))};
    selectedYear=2026;ensureYear(2026);
   }
+  normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);
   const yi=document.getElementById("yearInput");if(yi)yi.value=selectedYear;
   updateAppTitle();
  }catch(e){console.error(e)}
@@ -647,6 +704,7 @@ function bindOCR(){
    document.getElementById("ocrDate").value=r.date;
    document.getElementById("ocrDesc").value=r.desc;
    document.getElementById("ocrCat").value=r.cat;
+   document.getElementById("ocrAnalysisCat").value=inferAnalysisCategory(r.desc,r.cat);
    document.getElementById("ocrAmt").value=r.amount;
    document.getElementById("ocrText").textContent=text;
    document.getElementById("ocrPreview").style.display="block";
@@ -657,12 +715,14 @@ function bindOCR(){
   const date=document.getElementById("ocrDate").value,desc=document.getElementById("ocrDesc").value.trim();
   const cat=document.getElementById("ocrCat").value,amount=Number(document.getElementById("ocrAmt").value);
   if(!date||!desc||!Number.isFinite(amount)||amount<=0){document.getElementById("ocrStatus").textContent="Bitte Datum, Beschreibung und Betrag prüfen.";return}
-  data[current].expenses.push({date,desc,cat,amount:Math.round(amount*100)/100});
+  data[current].expenses.push({date,desc,cat,analysisCat:document.getElementById("ocrAnalysisCat")?.value||inferAnalysisCategory(desc,cat),amount:Math.round(amount*100)/100});
   save(false);renderMonth();bindOCR();setStatus("✓ Bon-Ausgabe eingetragen – verfügbare Summe aktualisiert.");
  };
 }
 initCloudUI();
 
+document.getElementById("navBudget").onclick=()=>{mainView="budget";render()};
+document.getElementById("navAnalysis").onclick=()=>{mainView="analysis";render()};
 document.getElementById("prevYear").onclick=()=>switchYear(selectedYear-1);
 document.getElementById("nextYear").onclick=()=>switchYear(selectedYear+1);
 document.getElementById("applyYear").onclick=()=>switchYear(document.getElementById("yearInput").value);
@@ -679,12 +739,12 @@ document.getElementById("reset").onclick=()=>{
  data.forEach(d=>d.expenses=[]);paid=Array.from({length:12},()=>({}));save(false);render();setStatus("✓ Variable Ausgaben und Häkchen gelöscht");
 };
 document.getElementById("csv").onclick=()=>{
- const rows=[["Jahr","Monat","Typ","Posten","Datum","Kategorie","Betrag"]];
+ const rows=[["Jahr","Monat","Typ","Posten","Datum","Händler/Kategorie","Analyse-Kategorie","Betrag"]];
  months.forEach((month,m)=>{
-  incomeNames.forEach(n=>rows.push([month,"Einnahme",n,"","",data[m].income[n]]));
-  fixed.forEach(x=>rows.push([month,"Fixkosten",x[0],"","",x[1]]));
-  Object.entries(special).forEach(([n,a])=>{if(a[m])rows.push([month,"Sonderkosten",n,"","",a[m]])});
-  data[m].expenses.forEach(e=>rows.push([month,"Variable Ausgabe",e.desc,e.date,e.cat,e.amount]));
+  incomeNames.forEach(n=>rows.push([selectedYear,month,"Einnahme",n,"","","",data[m].income[n]]));
+  fixed.forEach(x=>rows.push([selectedYear,month,"Fixkosten",x[0],"","","",x[1]]));
+  Object.entries(specialValues(m)).forEach(([n,a])=>{if(a[m])rows.push([selectedYear,month,"Sonderkosten",n,"","","",a[m]])});
+  data[m].expenses.forEach(e=>rows.push([selectedYear,month,"Variable Ausgabe",e.desc,e.date,e.cat,e.analysisCat||inferAnalysisCategory(e.desc,e.cat),e.amount]));
  });
  const csv=rows.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(";")).join("\n");
  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
@@ -692,15 +752,52 @@ document.getElementById("csv").onclick=()=>{
  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
+function monthExpenseTotal(m,year=selectedYear){const yd=allYears[String(year)];return Array.isArray(yd)&&yd[m]&&Array.isArray(yd[m].expenses)?yd[m].expenses.reduce((s,e)=>s+(Number(e.amount)||0),0):0;}
+function incomeTotalForYear(m,year){const yd=allYears[String(year)];return yd&&yd[m]?incomeNames.reduce((s,n)=>s+(Number(yd[m].income?.[n])||0),0):0;}
+function fixedTotalForYear(m,year){const vals=(fixedByYear[String(year)]&&fixedByYear[String(year)][m])||fixed.map(x=>Number(x[1]));const sv=ensureSpecialYear(year);return vals.reduce((s,v)=>s+(Number(v)||0),0)+Object.values(sv).reduce((s,a)=>s+(Number(a[m])||0),0);}
+function analysisMonths(year){return year===2026?[8,9,10,11]:[0,1,2,3,4,5,6,7,8,9,10,11];}
+function analysisExpenses(year){const yd=allYears[String(year)]||[];return analysisMonths(year).flatMap(m=>(yd[m]?.expenses||[]).map(normalizeExpense));}
+function renderAnalysis(){
+ const app=document.getElementById("app"),year=selectedYear,ms=analysisMonths(year),exps=analysisExpenses(year),actual=ms.filter(m=>(allYears[String(year)]?.[m]?.expenses||[]).length>0),total=exps.reduce((s,e)=>s+(Number(e.amount)||0),0),avg=actual.length?total/actual.length:0,short=reserveShortfall();
+ const cats={};exps.forEach(e=>{const c=e.analysisCat||inferAnalysisCategory(e.desc,e.cat);cats[c]=(cats[c]||0)+Number(e.amount||0)});const sorted=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+ const rows=ms.map(m=>{const inc=incomeTotalForYear(m,year),fix=fixedTotalForYear(m,year),v=monthExpenseTotal(m,year);return '<tr><td>'+months[m]+'</td><td class="money">'+euro(inc)+'</td><td class="money">'+euro(fix)+'</td><td class="money">'+euro(v)+'</td><td class="money '+(inc-fix-v<0?'negative':'positive')+'">'+euro(inc-fix-v)+'</td></tr>'}).join('');
+ app.innerHTML='<div class="card"><h2>🔎 Finanzanalyse '+year+'</h2><div class="analysis-note"><span class="tag">'+(year<2027?'LERNPHASE 2026':'OFFIZIELLE FINANZOPTIMIERUNG 2027')+'</span><div style="margin-top:7px">'+(year<2027?'September bis Dezember 2026 sammeln wir echte Daten und bauen deinen persönlichen Trend auf. Die App optimiert noch nicht aktiv.':'2027 ist der offizielle Start der Finanzoptimierung. Die Basis aus September–Dezember 2026 bleibt als persönlicher Vergleich erhalten.')+'</div></div><div class="analysis-grid"><div class="stat"><small>Analysierte Monate</small><strong>'+actual.length+' / '+ms.length+'</strong></div><div class="stat"><small>Variable Ausgaben</small><strong>'+euro(total)+'</strong></div><div class="stat"><small>Ø pro Datenmonat</small><strong>'+euro(avg)+'</strong></div><div class="stat"><small>Reserve</small><strong class="'+(short!==null&&short>0?'negative':'positive')+'">'+euro(reserveBalance())+'</strong></div></div></div>'+
+ '<div class="card"><h2>📅 Monatsentwicklung & Ausblick</h2><div class="tablewrap"><table class="analysis-table"><thead><tr><th>Monat</th><th>Einnahmen geplant</th><th>Fix + Sonderkosten</th><th>Variabel</th><th>Geplant übrig</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="muted" style="margin-top:8px">Variable Ausgaben zählen erst, wenn du sie einträgst. So kann die Analyse auch in kommende Monate schauen.</div></div>'+
+ '<div class="card"><h2>💸 Wo bleibt mein Geld?</h2>'+(sorted.length?sorted.map(([c,v])=>'<div style="margin:10px 0"><div style="display:flex;justify-content:space-between"><strong>'+escapeHtml(c)+'</strong><span class="money">'+euro(v)+'</span></div><div class="bar"><span style="width:'+Math.min(100,total?v/total*100:0)+'%"></span></div></div>').join(''):'<div class="muted">Noch keine variablen Ausgaben erfasst.</div>')+'</div>'+
+ '<div class="card"><h2>🐭 Kleinvieh-Falle</h2>'+(()=>{const a=exps.filter(e=>Number(e.amount)>0&&Number(e.amount)<20),sum=a.reduce((s,e)=>s+Number(e.amount),0);return a.length?'<div class="warnbox"><strong>'+a.length+' Ausgaben unter 20 € = '+euro(sum)+'</strong><br>Solche kleinen Beträge werden im Alltag leicht übersehen.</div>':'<div class="goodbox">Noch keine Ausgaben unter 20 € erfasst.</div>'})()+'</div>'+
+ '<div class="card"><h2>🧯 Reserve & Sicherheitsnetz</h2>'+(short?'<div class="warnbox"><strong>Reserve unter Mindestgrenze.</strong><br>Es fehlen '+euro(short)+' bis zu deinem Sicherheitsboden von '+euro(reserve.minimum)+'.</div>':'<div class="goodbox"><strong>Reserve im sicheren Bereich.</strong><br>Mindestreserve: '+euro(reserve.minimum)+'.</div>')+'<div class="tablewrap reserve-history"><table><thead><tr><th>Datum</th><th>Richtung</th><th>Betrag</th><th>Grund</th><th>Aktion</th></tr></thead><tbody>'+reserve.transactions.slice(-10).reverse().map((t,ri)=>{const idx=reserve.transactions.length-1-ri;return '<tr><td>'+escapeHtml(t.date)+'</td><td>'+(t.direction==='out'?'Reserve → Girokonto':'Girokonto → Reserve')+'</td><td class="money">'+euro(t.amount)+'</td><td>'+escapeHtml(t.reason)+'</td><td><button type="button" class="danger reserve-delete" data-reserve-index="'+idx+'">🗑️ Löschen</button></td></tr>';}).join('')+'</tbody></table></div></div>'+
+ '<div class="card"><h2>🎯 Finanzoptimierung</h2><div class="analysis-note">'+(year<2027?'2026 ist bewusst die Datensammelphase. Wir sammeln jetzt sauber Kategorien, Trends und Reservebewegungen.':'Ab 2027 werden daraus konkrete Empfehlungen: Trends, 3-/6-/12-Monats-Vergleiche, Einsparpotenzial, Reserve-Refill und später ein realistisches Spaßbudget.')+'</div></div>'+
+ '<div class="card"><h2>🏦 Reservebewegung eintragen</h2><div class="muted" style="margin-bottom:10px">Eine Reserveentnahme ist <strong>keine Einnahme</strong>. Ein Grund ist Pflicht. Die Startreserve beträgt 5.000 €. Von dort aus wird jede Bewegung auf diesen Bestand aufgerechnet.</div><div class="reserve-form"><div><div class="label">Betrag</div><input id="reserveAmt" type="number" min="0.01" step="0.01" placeholder="200,00"></div><div><div class="label">Richtung</div><select id="reserveDir"><option value="out">Reserve → Girokonto (Reserve −)</option><option value="in">Girokonto → Reserve (Reserve +)</option></select></div><div><div class="label">Grund *</div><input id="reserveReason" type="text" placeholder="z. B. Autoreparatur"></div><button class="blue" id="reserveAdd" disabled>Übernehmen</button></div><div class="muted" style="margin-top:6px">Bei „Girokonto → Reserve“ wird die Reserve erhöht und das verfügbare Giro-Budget des Monats entsprechend reduziert. Bei „Reserve → Girokonto“ passiert das Gegenteil. Die Bewegung ist keine Einnahme und keine normale variable Ausgabe.</div></div>';
+ const a=document.getElementById('reserveAmt'),r=document.getElementById('reserveReason'),b=document.getElementById('reserveAdd');
+function chk(){b.disabled=!(Number(a.value)>0&&r.value.trim());}
+[a,r].forEach(x=>x.addEventListener('input',chk));
+b.onclick=()=>{
+ const direction=document.getElementById('reserveDir').value;
+ if(!reserveTransfer(current,Number(a.value),direction,r.value.trim())){
+   alert(direction==='in'?'Auffüllung nicht möglich. Prüfe den Betrag.':'Entnahme nicht möglich. Der Betrag darf die vorhandene Reserve nicht überschreiten.');
+   return;
+ }
+ save(false);renderAnalysis();setStatus(direction==='in'?'✓ Girokonto → Reserve gebucht – Reserve erhöht.':'✓ Reserve → Girokonto gebucht – Reserve reduziert.');
+};
+document.querySelectorAll('.reserve-delete').forEach(btn=>btn.addEventListener('click',()=>{
+ const idx=Number(btn.dataset.reserveIndex);
+ const tx=reserve.transactions[idx];
+ if(!tx)return;
+ if(!confirm('Diese Reservebewegung wirklich löschen? Der Reservebestand wird entsprechend zurückgerechnet.'))return;
+ deleteReserveTransaction(idx);
+ save(false);renderAnalysis();
+ setStatus('✓ Reservebewegung gelöscht und Reservebestand zurückgerechnet.');
+}));
+}
 function render(){
- renderTabs();
- if(current===-1)renderYear();else{renderMonth();bindOCR()}
+ const nb=document.getElementById("navBudget"),na=document.getElementById("navAnalysis");if(nb)nb.className="analysis-tab "+(mainView==="budget"?"active":"");if(na)na.className="analysis-tab "+(mainView==="analysis"?"active":"");
+ if(mainView==="analysis"){document.getElementById("tabs").innerHTML="";renderAnalysis();return;}
+ renderTabs();if(current===-1)renderYear();else{renderMonth();bindOCR()}
 }
 load();
 ensureYear(selectedYear);
 ensureFixedYear(selectedYear);
 updateAppTitle();
-localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
 render();
 </script>
 </body>
