@@ -193,11 +193,33 @@ let cloudWriteTimer=null;
 let cloudLoaded=false;
 let mainView="budget";
 let reserve={minimum:5000,balance:5000,transactions:[]};
+let carryovers=[]; // Freigegebene Monatsüberträge: {fromYear,fromMonth,toYear,toMonth,amount}
 
 function normalizeExpense(e){const x={...e};if(!x.cat)x.cat="Sonstige";if(!x.analysisCat)x.analysisCat=inferAnalysisCategory(x.desc||"",x.cat);return x;}
 function inferAnalysisCategory(desc,cat){const t=(String(desc)+" "+String(cat)).toLowerCase();if(/aldi|combi|edeka|lidl|netto|rewe|lebensmittel|wochen.*einkauf/.test(t))return "Lebensmittel";if(/amazon|temu|klarna|online|shop/.test(t))return "Online-Shopping";if(/dm|rossmann|drogerie|müller/.test(t))return "Drogerie";if(/restaurant|gaststätte|gasthaus|essen gehen/.test(t))return "Restaurant";if(/auto|kfz|reifen|tanken|tankstelle/.test(t))return "Auto";if(/reparatur|waschmaschine|defekt|handwerker/.test(t))return "Reparatur / Anschaffung";if(/kind|familie|finn|lian/.test(t))return "Familie";if(/sport|kino|freizeit|verein/.test(t))return "Freizeit";return "Sonstiges";}
 function normalizeAllExpenses(){Object.values(allYears).forEach(yd=>{if(Array.isArray(yd))yd.forEach(d=>{if(d&&Array.isArray(d.expenses))d.expenses=d.expenses.map(normalizeExpense);});});}
 function normalizeReserve(){reserve=reserve&&typeof reserve==="object"?reserve:{minimum:5000,balance:5000,transactions:[]};reserve.minimum=5000;if(reserve.balance===null||reserve.balance===undefined||!Number.isFinite(Number(reserve.balance)))reserve.balance=5000;else reserve.balance=Math.max(0,Number(reserve.balance));if(!Array.isArray(reserve.transactions))reserve.transactions=[];reserve.transactions=reserve.transactions.map(x=>({...x,amount:Math.abs(Number(x.amount)||0),direction:x.direction==="in"?"in":"out",reason:String(x.reason||"")}));if(!reserve.initialBalanceSet){reserve.balance=5000;reserve.initialBalanceSet=true;}}
+function normalizeCarryovers(){
+ carryovers=Array.isArray(carryovers)?carryovers:[];
+ carryovers=carryovers.map(x=>({
+  fromYear:Number(x.fromYear)||2026,fromMonth:Number(x.fromMonth)||0,
+  toYear:Number(x.toYear)||2026,toMonth:Number(x.toMonth)||0,
+  amount:Math.round((Number(x.amount)||0)*100)/100
+ })).filter(x=>Number.isFinite(x.amount)&&x.fromMonth>=0&&x.fromMonth<12&&x.toMonth>=0&&x.toMonth<12);
+}
+function nextMonthTarget(year,month){return month===11?{year:Number(year)+1,month:0}:{year:Number(year),month:Number(month)+1};}
+function carryoverIncoming(year,month){return carryovers.filter(x=>x.toYear===Number(year)&&x.toMonth===Number(month)).reduce((s,x)=>s+x.amount,0);}
+function carryoverOutgoing(year,month){return carryovers.filter(x=>x.fromYear===Number(year)&&x.fromMonth===Number(month)).reduce((s,x)=>s+x.amount,0);}
+function carryoverRecord(year,month){return carryovers.find(x=>x.fromYear===Number(year)&&x.fromMonth===Number(month))||null;}
+function setCarryover(year,month,amount){
+ normalizeCarryovers();
+ const fromYear=Number(year),fromMonth=Number(month);
+ carryovers=carryovers.filter(x=>!(x.fromYear===fromYear&&x.fromMonth===fromMonth));
+ amount=Math.round(Number(amount||0)*100)/100;
+ if(Math.abs(amount)<0.005)return;
+ const target=nextMonthTarget(fromYear,fromMonth);
+ carryovers.push({fromYear,fromMonth,toYear:target.year,toMonth:target.month,amount});
+}
 function reserveBalance(){return Number.isFinite(Number(reserve.balance))?Number(reserve.balance):5000}
 function reserveShortfall(){return reserveBalance()===null?null:Math.max(0,reserve.minimum-reserveBalance());}
 function reserveNetForMonth(m,year=selectedYear){return reserve.transactions.filter(t=>Number(t.year)===Number(year)&&Number(t.month)===Number(m)).reduce((s,t)=>s+(t.direction==="out"?Number(t.amount)||0:-(Number(t.amount)||0)),0);}
@@ -303,7 +325,7 @@ function renderMonth(){
  '<div class="stat"><small>Fixkosten geplant</small><strong id="plannedFixed"></strong></div>'+
  '<div class="stat"><small>Geplant übrig</small><strong id="plannedFree"></strong></div>'+
  '<div class="stat"><small>Aktuell noch verfügbar</small><strong id="available"></strong></div>'+
- '</div></div>'+
+ '</div><div id="carryoverInfo" class="muted" style="margin-top:8px"></div><div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #dfe3e8;border-radius:9px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><strong>📅 Monatsübertrag</strong><div id="carryoverNote" class="muted" style="margin-top:3px"></div></div><button type="button" id="carryoverBtn" class="blue">➡ In nächsten Monat übertragen</button></div></div>'+
  '<div class="card"><h2>🧯 Reserve</h2><div class="muted">Sicherheitsboden: 5.000 €. Reservebewegungen sind keine Einnahmen.</div><div class="cards" style="margin-top:10px"><div class="stat"><small>Aktuelle Reserve</small><strong id="reserveMonthBalance">'+euro(reserveBalance())+'</strong></div><div class="stat"><small>Reserve → Giro in diesem Monat</small><strong>'+euro(Math.max(0,reserveNetForMonth(m)))+'</strong></div><div class="stat"><small>Nach Mindestreserve fehlen</small><strong class="'+(reserveShortfall()!==null&&reserveShortfall()>0?'negative':'positive')+'">'+euro(reserveShortfall())+'</strong></div></div>'+(reserveShortfall()!==null&&reserveShortfall()>0?'<div class="warnbox" style="margin-top:10px">⚠️ Reserve liegt unter dem Sicherheitsboden. Die Finanzanalyse plant die Auffüllung separat.</div>':'')+'</div>'+
  '<div class="card"><h2>💰 Einnahmen</h2><div class="tablewrap"><table><thead><tr><th>Einnahme</th><th>Betrag</th></tr></thead><tbody id="incomeRows"></tbody></table></div></div>'+
  '<div class="card"><h2>🔒 Fixkosten</h2>'+
@@ -462,9 +484,33 @@ function updateMonth(){
   const items=fixed.map((x,i)=>({amount:Number(values[i])||0,key:"f:"+x[0]}));
  Object.entries(specialValues(m)).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
- const available=totalIncome-paidAmount-variable+reserveNetForMonth(m);
+ const baseAvailable=totalIncome-paidAmount-variable+reserveNetForMonth(m);
+ const available=baseAvailable+carryoverIncoming(selectedYear,m)-carryoverOutgoing(selectedYear,m);
  const el=document.getElementById("available");
  if(el){el.textContent=euro(available);el.className=available<0?"negative":"positive";}
+ const carryEl=document.getElementById("carryoverInfo");
+ if(carryEl){
+  const rec=carryoverRecord(selectedYear,m);
+  const incoming=carryoverIncoming(selectedYear,m);
+  carryEl.innerHTML=(incoming?'<div class="muted">↙ Übertrag aus Vormonat: <strong>'+euro(incoming)+'</strong></div>':'')+(rec?'<div class="muted">↗ Für '+(nextMonthTarget(selectedYear,m).month===0?months[0]+' '+(selectedYear+1):months[nextMonthTarget(selectedYear,m).month])+' freigegeben: <strong>'+euro(rec.amount)+'</strong></div>':'');
+ }
+ const carryBtn=document.getElementById("carryoverBtn"),carryNote=document.getElementById("carryoverNote");
+ if(carryBtn){
+  const rec=carryoverRecord(selectedYear,m);
+  const target=nextMonthTarget(selectedYear,m);
+  carryBtn.textContent=rec?'↩ Übertrag zurücknehmen':'➡ '+(available<0?'Fehlbetrag':'Restbetrag')+' in nächsten Monat übertragen';
+  carryBtn.className=rec?'gray':'blue';
+  carryBtn.disabled=rec?false:Math.abs(available)<0.005;
+  carryBtn.onclick=()=>{
+   if(rec){
+    if(!confirm('Den freigegebenen Übertrag von '+euro(rec.amount)+' wirklich zurücknehmen?'))return;
+    setCarryover(selectedYear,m,0);save(false);renderMonth();setStatus('✓ Monatsübertrag zurückgenommen.');return;
+   }
+   if(!confirm((available<0?'Den Fehlbetrag von ':'Den Restbetrag von ')+euro(available)+' für '+(target.month===0?months[0]+' '+target.year:months[target.month])+' freigeben?'))return;
+   setCarryover(selectedYear,m,available);save(false);renderMonth();setStatus('✓ Monatsübertrag freigegeben – '+euro(available)+' für den nächsten Monat.');
+  };
+ }
+ if(carryNote){const rec=carryoverRecord(selectedYear,m);carryNote.textContent=rec?'Dieser Übertrag ist bereits freigegeben und wird im nächsten Monat berücksichtigt.':'Nur wenn du ausdrücklich freigibst, wird der aktuelle Betrag in den nächsten Monat übernommen. Ein Minus wird als Fehlbetrag weitergegeben. Ohne Freigabe bleibt der nächste Monat unverändert.';}
  const p=document.getElementById("paidFixed"),o=document.getElementById("openFixed"),f=document.getElementById("freeAfterPaid");
  if(p)p.textContent=euro(paidAmount);if(o)o.textContent=euro(fixedTotal(m)-paidAmount);
  if(f){f.textContent=euro(available);f.className=available<0?"negative":"positive";}
@@ -555,7 +601,7 @@ function buildStore(){
  allYears[String(selectedYear)]=data;
  allPaid[String(selectedYear)]=paid;
  ensureFixedYear(selectedYear);
- return {app:"MeinBudget",formatVersion:5,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear,specialByYear,reserve};
+ return {app:"MeinBudget",formatVersion:6,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear,specialByYear,reserve,carryovers};
 }
 function save(show=true){
  const store=buildStore();
@@ -568,7 +614,7 @@ async function saveCloud(){
  if(!sbClient||!sbUser||!cloudLoaded)return;
  try{
   const updated=new Date().toISOString();
-  const cloudData={years:allYears,fixedByYear,specialByYear,reserve};
+  const cloudData={years:allYears,fixedByYear,specialByYear,reserve,carryovers};
   const {error}=await sbClient.from("budget_data").upsert({user_id:sbUser.id,data:cloudData,paid:allPaid,updated_at:updated},{onConflict:"user_id"});
   if(error)throw error;
   lastCloudUpdatedAt=updated;setStatus("✓ Mit Cloud synchronisiert");setCloudStatus("✓ Synchronisiert","cloud-ok");
@@ -583,16 +629,16 @@ async function loadCloud(){
   if(!row){cloudLoaded=false;setCloudStatus("⚠️ Keine Cloud-Daten gefunden – nichts wird automatisch hochgeladen.","cloud-warn");setStatus("⚠️ Cloud ist leer. Lokale Daten bleiben unangetastet.");return;}
   const cd=row.data;
   if(Array.isArray(cd)){allYears={"2026":cd.map((d,i)=>({income:{...incomesDefault(i,2026),...(d.income||{})},expenses:Array.isArray(d.expenses)?d.expenses.map(normalizeExpense):[]}))};allPaid={"2026":Array.isArray(row.paid)&&row.paid.length===12?row.paid.map(x=>x||{}):Array.from({length:12},()=>({}))};}
-  else if(cd&&cd.years&&typeof cd.years==="object"){allYears=cd.years;fixedByYear=(cd.fixedByYear&&typeof cd.fixedByYear==="object")?cd.fixedByYear:{};specialByYear=(cd.specialByYear&&typeof cd.specialByYear==="object")?cd.specialByYear:{};reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};}
+  else if(cd&&cd.years&&typeof cd.years==="object"){allYears=cd.years;fixedByYear=(cd.fixedByYear&&typeof cd.fixedByYear==="object")?cd.fixedByYear:{};specialByYear=(cd.specialByYear&&typeof cd.specialByYear==="object")?cd.specialByYear:{};reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;carryovers=Array.isArray(cd.carryovers)?cd.carryovers:[];allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};}
   else if(cd&&typeof cd==="object"){allYears=cd;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:{};}
-  normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);if(!Array.isArray(allYears[String(selectedYear)]))allYears[String(selectedYear)]=makeData(selectedYear);if(!Array.isArray(allPaid[String(selectedYear)])||allPaid[String(selectedYear)].length!==12)allPaid[String(selectedYear)]=Array.from({length:12},()=>({}));ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at||null;cloudLoaded=true;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("✓ Cloud-Daten geladen – Bestand geschützt");setCloudStatus("✓ Synchronisiert","cloud-ok");
+  normalizeAllExpenses();normalizeReserve();normalizeCarryovers();ensureSpecialYear(selectedYear);if(!Array.isArray(allYears[String(selectedYear)]))allYears[String(selectedYear)]=makeData(selectedYear);if(!Array.isArray(allPaid[String(selectedYear)])||allPaid[String(selectedYear)].length!==12)allPaid[String(selectedYear)]=Array.from({length:12},()=>({}));ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at||null;cloudLoaded=true;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("✓ Cloud-Daten geladen – Bestand geschützt");setCloudStatus("✓ Synchronisiert","cloud-ok");
  }catch(e){console.error(e);cloudLoaded=false;setStatus("⚠️ Cloud-Daten konnten nicht geladen werden – nichts überschrieben");setCloudStatus("⚠️ "+(e.message||e),"cloud-warn");}
 }
 async function checkCloudUpdates(){
  if(!sbClient||!sbUser||!cloudLoaded)return;
  try{
   const {data:row,error}=await sbClient.from("budget_data").select("data,paid,updated_at").eq("user_id",sbUser.id).maybeSingle();if(error||!row||!row.updated_at)return;
-  if(!lastCloudUpdatedAt||new Date(row.updated_at)>new Date(lastCloudUpdatedAt)){const cd=row.data||{};if(cd&&cd.years){allYears=cd.years;fixedByYear=cd.fixedByYear&&typeof cd.fixedByYear==="object"?cd.fixedByYear:fixedByYear;specialByYear=cd.specialByYear&&typeof cd.specialByYear==="object"?cd.specialByYear:specialByYear;reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;}else if(Array.isArray(cd))allYears={"2026":cd};else if(cd&&typeof cd==="object")allYears=cd;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:allPaid;normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("↻ Cloud-Änderung übernommen");}
+  if(!lastCloudUpdatedAt||new Date(row.updated_at)>new Date(lastCloudUpdatedAt)){const cd=row.data||{};if(cd&&cd.years){allYears=cd.years;fixedByYear=cd.fixedByYear&&typeof cd.fixedByYear==="object"?cd.fixedByYear:fixedByYear;specialByYear=cd.specialByYear&&typeof cd.specialByYear==="object"?cd.specialByYear:specialByYear;reserve=cd.reserve&&typeof cd.reserve==="object"?cd.reserve:reserve;carryovers=Array.isArray(cd.carryovers)?cd.carryovers:[];}else if(Array.isArray(cd))allYears={"2026":cd};else if(cd&&typeof cd==="object")allYears=cd;allPaid=(row.paid&&typeof row.paid==="object")?row.paid:allPaid;normalizeAllExpenses();normalizeReserve();normalizeCarryovers();ensureSpecialYear(selectedYear);ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);data=allYears[String(selectedYear)];paid=allPaid[String(selectedYear)];lastCloudUpdatedAt=row.updated_at;localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));render();setStatus("↻ Cloud-Änderung übernommen");}
  }catch(e){console.warn("Cloud polling",e)}
 }
 function setCloudStatus(text,cls=""){
@@ -671,6 +717,7 @@ function restoreBackupFile(file){
    fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
    specialByYear=(saved.specialByYear&&typeof saved.specialByYear==="object")?saved.specialByYear:{};
    reserve=saved.reserve&&typeof saved.reserve==="object"?saved.reserve:reserve;
+   carryovers=Array.isArray(saved.carryovers)?saved.carryovers:carryovers;
    selectedYear=Number(saved.currentYear)||2026;
    ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);
    localStorage.setItem("budget2026_data",JSON.stringify(buildStore()));
@@ -693,6 +740,7 @@ function load(){
    fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
    specialByYear=(saved.specialByYear&&typeof saved.specialByYear==="object")?saved.specialByYear:{};
    reserve=saved.reserve&&typeof saved.reserve==="object"?saved.reserve:reserve;
+   carryovers=Array.isArray(saved.carryovers)?saved.carryovers:carryovers;
    selectedYear=Number(saved.currentYear)||2026;
    ensureYear(selectedYear);ensureFixedYear(selectedYear);ensureSpecialYear(selectedYear);
   }else if(saved&&saved.years&&typeof saved.years==="object"){
@@ -709,7 +757,7 @@ function load(){
    allPaid={"2026":Array.from({length:12},()=>({}))};
    selectedYear=2026;ensureYear(2026);
   }
-  normalizeAllExpenses();normalizeReserve();ensureSpecialYear(selectedYear);
+  normalizeAllExpenses();normalizeReserve();normalizeCarryovers();ensureSpecialYear(selectedYear);
   const yi=document.getElementById("yearInput");if(yi)yi.value=selectedYear;
   updateAppTitle();
  }catch(e){console.error(e)}
