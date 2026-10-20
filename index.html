@@ -564,7 +564,8 @@ function updateMonth(){
  const fixedTotalNow=euro(fixedTotal(m));
  const fixedTotalStatEl=document.getElementById("fixedTotalStat");if(fixedTotalStatEl)fixedTotalStatEl.textContent=fixedTotalNow;
  const fixedRowsTotalEl=document.getElementById("fixedRowsTotal");if(fixedRowsTotalEl)fixedRowsTotalEl.textContent=fixedTotalNow;
- const planned=totalIncome-fixedTotal(m)-variable+reserveNetForMonth(m);
+ const carryNet=carryoverIncoming(selectedYear,m)-carryoverOutgoing(selectedYear,m);
+ const planned=totalIncome-fixedTotal(m)-variable+reserveNetForMonth(m)+carryNet;
  const plannedEl=document.getElementById("plannedFree");
  if(plannedEl){plannedEl.textContent=euro(planned);plannedEl.className=planned<0?"negative":"positive";}
  const values=fixedValues(m);
@@ -572,7 +573,7 @@ function updateMonth(){
  Object.entries(specialValues(m)).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
  const baseAvailable=totalIncome-paidAmount-variable+reserveNetForMonth(m);
- const available=baseAvailable+carryoverIncoming(selectedYear,m)-carryoverOutgoing(selectedYear,m);
+ const available=baseAvailable+carryNet;
  const el=document.getElementById("available");
  if(el){el.textContent=euro(available);el.className=available<0?"negative":"positive";}
  const carryEl=document.getElementById("carryoverInfo");
