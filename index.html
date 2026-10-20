@@ -476,7 +476,7 @@ function renderFixedMonth(){
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
  const open=fixedTotal(m)-paidAmount;
  const tr=document.createElement("tr");tr.className="total";
- tr.innerHTML="<td></td><td>Fix + Sonderkosten</td><td class='money'>"+euro(fixedTotal(m))+"</td>";body.appendChild(tr);
+ tr.innerHTML="<td></td><td>Fix + Sonderkosten</td><td class='money' id='fixedRowsTotal'>"+euro(fixedTotal(m))+"</td>";body.appendChild(tr);
  const p=document.getElementById("paidFixed"),o=document.getElementById("openFixed"),f=document.getElementById("freeAfterPaid");
  if(p)p.textContent=euro(paidAmount);if(o)o.textContent=euro(open);
  const fixedStat=document.getElementById("fixedTotalStat");if(fixedStat)fixedStat.textContent=euro(fixedTotal(m));
@@ -561,6 +561,9 @@ function updateMonth(){
  const m=current,totalIncome=incomeTotal(m),variable=variableTotal(m);
  document.getElementById("mi").textContent=euro(totalIncome);
  document.getElementById("plannedFixed").textContent=euro(fixedTotal(m));
+ const fixedTotalNow=euro(fixedTotal(m));
+ const fixedTotalStatEl=document.getElementById("fixedTotalStat");if(fixedTotalStatEl)fixedTotalStatEl.textContent=fixedTotalNow;
+ const fixedRowsTotalEl=document.getElementById("fixedRowsTotal");if(fixedRowsTotalEl)fixedRowsTotalEl.textContent=fixedTotalNow;
  const planned=totalIncome-fixedTotal(m)-variable+reserveNetForMonth(m);
  const plannedEl=document.getElementById("plannedFree");
  if(plannedEl){plannedEl.textContent=euro(planned);plannedEl.className=planned<0?"negative":"positive";}
