@@ -123,7 +123,6 @@ pre.ocr{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;b
 
 <script>
 "use strict";
-const TEST_NO_CLOUD_WRITE=true; // V20-Prototyp: Änderungen bleiben lokal und werden nicht zu Supabase hochgeladen.
 
 const months=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 const incomeNames=["Gehalt","Trainergeld","Baukindergeld","Bonus","Weihnachtsgeld","Sonstige Einnahmen"];
@@ -154,16 +153,6 @@ const special={
  "Brandkasse":[0,0,279.54,0,0,0,0,0,0,0,0,0]
 };
 let specialByYear={};
-let recurringFixedRules=[];
-function recurringApplies(rule,month,year=selectedYear){
- const y=Number(year);if(y<Number(rule.startYear||2026)||(rule.endYear&&y>Number(rule.endYear))||(rule.endYear&&y===Number(rule.endYear)&&rule.endMonth!==null&&rule.endMonth!==undefined&&month>Number(rule.endMonth)))return false;
- if(rule.frequency==="monthly")return true;
- if(rule.frequency==="yearly")return Number(rule.month)===month;
- if(rule.frequency==="custom")return Array.isArray(rule.months)&&rule.months.includes(month);
- return false;
-}
-function recurringFixedForMonth(month,year=selectedYear){return recurringFixedRules.filter(r=>recurringApplies(r,month,year));}
-function recurringFixedTotal(month,year=selectedYear){return recurringFixedForMonth(month,year).reduce((sum,r)=>sum+(Number(r.amount)||0),0);}
 function ensureSpecialYear(year){
  const y=String(year);
  if(!specialByYear[y]||typeof specialByYear[y]!=="object") specialByYear[y]={};
@@ -319,7 +308,7 @@ function incomeReceivedTotal(m,year=selectedYear){
  },0);
 }
 function incomeTotal(m){return incomeReceivedTotal(m,selectedYear)}
-function fixedTotal(m){return fixedMonthly(m)+specialTotal(m)+recurringFixedTotal(m)}
+function fixedTotal(m){return fixedMonthly(m)+specialTotal(m)}
 function variableTotal(m){return data[m].expenses.reduce((sum,e)=>sum+(Number(e.amount)||0),0)}
 function balance(m){return incomeTotal(m)-fixedTotal(m)-variableTotal(m)}
 
@@ -366,13 +355,6 @@ function renderMonth(){
  '<div class="card"><h2>🔒 Fixkosten</h2>'+
  '<div class="muted" style="margin-bottom:10px">Die Fixkosten bleiben vollständig im Budget. Mit dem Häkchen markierst du nur, dass die Abbuchung bereits erfolgt ist. Auch Sonderkosten lassen sich jetzt mit − / + und direkt im Feld anpassen.</div>'+
  '<div class="tablewrap"><table><thead><tr><th>✓ bezahlt</th><th>Posten</th><th>Betrag</th></tr></thead><tbody id="fixedRows"></tbody></table></div>'+
- '<div style="margin-top:12px;padding:12px;background:#f8fafc;border:1px solid #dfe3e8;border-radius:9px">'+
- '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>🔁 Wiederkehrende Fixkosten</strong><button type="button" class="blue" id="toggleRecurringForm">＋ Position hinzufügen</button></div>'+
- '<div class="muted" style="margin-top:5px">Einmal anlegen – die Position erscheint automatisch in den passenden Monaten und Folgejahren.</div>'+
- '<div id="recurringList" style="margin-top:10px"></div>'+
- '<div id="recurringForm" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #dfe3e8">'+
- '<div class="form"><div><div class="label">Bezeichnung</div><input id="recName" type="text" placeholder="z. B. Hausratversicherung"></div><div><div class="label">Betrag (€)</div><input id="recAmount" type="number" min="0" step="0.01" placeholder="149,10"></div><div><div class="label">Wiederholung</div><select id="recFrequency"><option value="monthly">Jeden Monat</option><option value="yearly">Einmal jährlich</option><option value="custom">Ausgewählte Monate</option></select></div><div id="recMonthWrap"><div class="label">Fälligkeitsmonat</div><select id="recMonth">'+months.map((m,i)=>'<option value="'+i+'">'+m+'</option>').join('')+'</select></div><div id="recMonthsWrap" style="display:none"><div class="label">Monate (Mehrfachauswahl mit Komma, z. B. 1, 7)</div><input id="recMonths" type="text" placeholder="1, 7"></div><div><div class="label">Startjahr</div><input id="recStartYear" type="number" min="2020" step="1"></div><div><div class="label">Endjahr (optional)</div><input id="recEndYear" type="number" min="2020" step="1" placeholder="leer = unbegrenzt"></div><div><div class="label">Endmonat im Endjahr</div><select id="recEndMonth">'+months.map((m,i)=>'<option value="'+i+'">'+m+'</option>').join('')+'</select></div></div>'+
- '<div class="toolbar"><button type="button" class="blue" id="saveRecurring">Speichern</button><button type="button" class="gray" id="cancelRecurring">Abbrechen</button></div><div class="muted" style="margin-top:6px">Hinweis: Bei Budgetposten wie Tanken, deren tatsächliche Rechnung zusätzlich als variable Ausgabe erfasst wird, müssen wir noch eine Verrechnung ergänzen, damit nichts doppelt abgezogen wird.</div></div></div>'+
  '<div style="margin-top:12px" class="cards">'+
  '<div class="stat"><small>Fixkosten gesamt</small><strong id="fixedTotalStat"></strong></div>'+
  '<div class="stat"><small>Bereits abgebucht</small><strong id="paidFixed"></strong></div>'+
@@ -409,7 +391,6 @@ function renderMonth(){
  if(reserveTopupAmt&&reserveTopupAdd){const chkTopup=()=>{reserveTopupAdd.disabled=!(Number(reserveTopupAmt.value)>0);};reserveTopupAmt.oninput=chkTopup;reserveTopupAdd.onclick=()=>{const amount=Number(reserveTopupAmt.value);const reason=reserveTopupReason.value;if(!reserveTransfer(current,amount,'in',reason,new Date().toISOString().slice(0,10))){alert('Auffüllung nicht möglich. Prüfe den Betrag.');return;}save(false);renderMonth();setStatus('✓ '+euro(amount)+' aus dem Girokonto in die Reserve übertragen.');};}
  renderIncomeMonth();
  renderFixedMonth();
- renderRecurringManager();
  renderExpensesMonth();
  updateMonth();
 }
@@ -447,55 +428,12 @@ function renderIncomeMonth(){
  body.appendChild(tr);
 }
 
-function renderRecurringManager(){
- const list=document.getElementById("recurringList");if(!list)return;list.innerHTML="";
- if(!recurringFixedRules.length){list.innerHTML='<div class="muted">Noch keine zusätzlichen wiederkehrenden Fixkosten angelegt.</div>';}
- recurringFixedRules.forEach(rule=>{
-  const row=document.createElement("div");row.style.cssText="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 0;border-top:1px solid #e5e7eb";
-  const info=document.createElement("div");
-  let cadence=rule.frequency==="monthly"?"monatlich":rule.frequency==="yearly"?"jährlich im "+months[Number(rule.month)]:"in: "+(rule.months||[]).map(m=>months[m]).join(", ");
-  info.innerHTML='<strong>'+escapeHtml(rule.name)+'</strong><div class="muted">'+euro(rule.amount)+' · '+cadence+' · ab '+Number(rule.startYear||2026)+(rule.endYear?' bis '+rule.endYear:'')+'</div>';
-  const actions=document.createElement("div");actions.style.cssText="display:flex;gap:6px";
-  const edit=document.createElement("button");edit.className="gray";edit.textContent="Bearbeiten";edit.onclick=()=>openRecurringForm(rule);
-  const del=document.createElement("button");del.className="red";del.textContent="Löschen";del.onclick=()=>{if(!confirm('Wiederkehrende Fixkostenposition „'+rule.name+'“ löschen? Bereits gespeicherte Monatsdaten bleiben erhalten; zukünftige Einplanung entfällt.'))return;rule.endYear=selectedYear;rule.endMonth=current;save(false);renderMonth();setStatus('✓ Wiederkehrende Position ab diesem Monat beendet.');};
-  actions.append(edit,del);row.append(info,actions);list.appendChild(row);
- });
- const toggle=document.getElementById("toggleRecurringForm"),form=document.getElementById("recurringForm"),freq=document.getElementById("recFrequency"),monthWrap=document.getElementById("recMonthWrap"),monthsWrap=document.getElementById("recMonthsWrap");
- const syncFreq=()=>{if(!freq)return;monthWrap.style.display=freq.value==="yearly"?"block":"none";monthsWrap.style.display=freq.value==="custom"?"block":"none";};
- if(freq)freq.onchange=syncFreq;
- if(toggle)toggle.onclick=()=>openRecurringForm(null);
- const saveBtn=document.getElementById("saveRecurring"),cancel=document.getElementById("cancelRecurring");
- if(saveBtn)saveBtn.onclick=()=>{
-  const name=document.getElementById("recName").value.trim(),amount=Number(document.getElementById("recAmount").value),frequency=freq.value,startYear=Number(document.getElementById("recStartYear").value)||selectedYear,endRaw=document.getElementById("recEndYear").value.trim(),endYear=endRaw?Number(endRaw):null;
-  let monthsSelected=[];if(frequency==="yearly")monthsSelected=[Number(document.getElementById("recMonth").value)];if(frequency==="custom"){monthsSelected=[...new Set(document.getElementById("recMonths").value.split(",").map(x=>Number(x.trim())-1).filter(x=>Number.isInteger(x)&&x>=0&&x<12))];}
-  if(!name||!Number.isFinite(amount)||amount<=0){alert("Bitte Bezeichnung und einen Betrag größer 0 eingeben.");return;}
-  if(frequency==="custom"&&!monthsSelected.length){alert("Bitte mindestens einen Monat angeben (1 = Januar, 12 = Dezember).");return;}
-  if(endYear&&endYear<startYear){alert("Das Endjahr darf nicht vor dem Startjahr liegen.");return;}
-  const id=saveBtn.dataset.editId;const endMonthRaw=document.getElementById("recEndMonth").value;const rule={id:id||("rf_"+Date.now()+"_"+Math.random().toString(36).slice(2,7)),name,amount:Math.round(amount*100)/100,frequency,month:frequency==="yearly"?monthsSelected[0]:null,months:frequency==="custom"?monthsSelected:[],startYear,endYear,endMonth:endYear?Number(endMonthRaw):null};
-  const idx=recurringFixedRules.findIndex(x=>x.id===id);if(idx>=0)recurringFixedRules[idx]=rule;else recurringFixedRules.push(rule);
-  save(false);renderMonth();setStatus("✓ Wiederkehrende Fixkosten gespeichert.");
- };
- if(cancel)cancel.onclick=()=>{form.style.display="none";saveBtn.dataset.editId="";};
- syncFreq();
-}
-function openRecurringForm(rule){
- const form=document.getElementById("recurringForm"),saveBtn=document.getElementById("saveRecurring");if(!form||!saveBtn)return;
- form.style.display="block";saveBtn.dataset.editId=rule?rule.id:"";
- document.getElementById("recName").value=rule?.name||"";document.getElementById("recAmount").value=rule?.amount??"";
- document.getElementById("recFrequency").value=rule?.frequency||"monthly";
- document.getElementById("recMonth").value=String(rule?.month??current);
- document.getElementById("recMonths").value=rule?.months?.map(m=>m+1).join(", ")||"";
- document.getElementById("recStartYear").value=rule?.startYear||selectedYear;document.getElementById("recEndYear").value=rule?.endYear||"";document.getElementById("recEndMonth").value=String(rule?.endMonth??11);
- document.getElementById("recFrequency").dispatchEvent(new Event("change"));
-}
-
 function renderFixedMonth(){
  const body=document.getElementById("fixedRows"),m=current;body.innerHTML="";
  const values=fixedValues(m);
  const svalues=specialValues(m);
  const items=fixed.map((x,i)=>({name:x[0],amount:Number(values[i])||0,key:"f:"+x[0],idx:i}));
  Object.entries(svalues).forEach(([name,arr])=>{if(Number(arr[m])>0||Number(special[name]?.[m])>0)items.push({name,amount:Number(arr[m])||0,key:"s:"+name,special:true});});
- recurringFixedForMonth(m).forEach(rule=>items.push({name:rule.name,amount:Number(rule.amount)||0,key:"r:"+rule.id,recurring:true,rule}));
  items.forEach(item=>{
   const tr=document.createElement("tr");
   const check=document.createElement("td");check.style.textAlign="left";
@@ -504,17 +442,8 @@ function renderFixedMonth(){
   check.appendChild(cb);tr.appendChild(check);
   const name=document.createElement("td");name.textContent=item.name;tr.appendChild(name);
   const amount=document.createElement("td");amount.className="money";
-  if(item.recurring){
+  if(item.idx!==undefined){
    const wrap=document.createElement("div");wrap.className="income";
-   const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";
-   const input=document.createElement("input");input.type="number";input.step="0.01";input.min="0";input.value=item.amount.toFixed(2);
-   const euroSign=document.createElement("span");euroSign.textContent=" €";
-   const plus=document.createElement("button");plus.textContent="+";plus.title="1 Cent hinzufügen";
-   function change(delta){const next=Math.max(0,Math.round(((Number(input.value)||0)+delta)*100)/100);item.rule.amount=next;input.value=next.toFixed(2);updateMonth();save(false);}
-   minus.onclick=()=>change(-0.01);plus.onclick=()=>change(0.01);
-   input.onchange=()=>{item.rule.amount=Math.max(0,Math.round((Number(input.value)||0)*100)/100);updateMonth();save(false);};
-   wrap.append(minus,input,euroSign,plus);amount.appendChild(wrap);
-  }else if(item.idx!==undefined){
    const minus=document.createElement("button");minus.textContent="−";minus.title="1 Cent abziehen";minus.title="1 Cent abziehen";
    const input=document.createElement("input");input.type="number";input.step="0.01";input.min="0";input.value=item.amount.toFixed(2);
    const euroSign=document.createElement("span");euroSign.textContent=" €";
@@ -642,7 +571,6 @@ function updateMonth(){
  const values=fixedValues(m);
   const items=fixed.map((x,i)=>({amount:Number(values[i])||0,key:"f:"+x[0]}));
  Object.entries(specialValues(m)).forEach(([name,arr])=>{if(arr[m])items.push({amount:arr[m],key:"s:"+name})});
- recurringFixedForMonth(m).forEach(rule=>items.push({amount:Number(rule.amount)||0,key:"r:"+rule.id}));
  const paidAmount=items.filter(x=>paid[m][x.key]).reduce((a,x)=>a+x.amount,0);
  const baseAvailable=totalIncome-paidAmount-variable+reserveNetForMonth(m);
  const available=baseAvailable+carryNet;
@@ -761,17 +689,16 @@ function buildStore(){
  allYears[String(selectedYear)]=data;
  allPaid[String(selectedYear)]=paid;
  ensureFixedYear(selectedYear);
- return {app:"MeinBudget",formatVersion:6,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear,specialByYear,recurringFixedRules,reserve,carryovers};
+ return {app:"MeinBudget",formatVersion:6,savedAt:new Date().toISOString(),currentYear:selectedYear,years:allYears,paidYears:allPaid,fixedByYear,specialByYear,reserve,carryovers};
 }
 function save(show=true){
  const store=buildStore();
  localStorage.setItem("budget2026_data",JSON.stringify(store));
- if(show)setStatus(sbUser?(TEST_NO_CLOUD_WRITE?"✓ Lokal gespeichert – Cloud-Sync im Test deaktiviert":"✓ Lokal gespeichert – Cloud wird synchronisiert …"):"✓ Gespeichert");
- if(sbUser&&!TEST_NO_CLOUD_WRITE){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
+ if(show)setStatus(sbUser?"✓ Lokal gespeichert – Cloud wird synchronisiert …":"✓ Gespeichert");
+ if(sbUser){clearTimeout(cloudWriteTimer);cloudWriteTimer=setTimeout(saveCloud,250);}
 }
 
 async function saveCloud(){
- if(TEST_NO_CLOUD_WRITE)return;
  if(!sbClient||!sbUser||!cloudLoaded)return;
  try{
   const updated=new Date().toISOString();
@@ -877,7 +804,6 @@ function restoreBackupFile(file){
    allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
    fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
    specialByYear=(saved.specialByYear&&typeof saved.specialByYear==="object")?saved.specialByYear:{};
-   recurringFixedRules=Array.isArray(saved.recurringFixedRules)?saved.recurringFixedRules:[];
    reserve=saved.reserve&&typeof saved.reserve==="object"?saved.reserve:reserve;
    carryovers=Array.isArray(saved.carryovers)?saved.carryovers:carryovers;
    selectedYear=Number(saved.currentYear)||2026;
@@ -901,7 +827,6 @@ function load(){
    allPaid=(saved.paidYears&&typeof saved.paidYears==="object")?saved.paidYears:{};
    fixedByYear=(saved.fixedByYear&&typeof saved.fixedByYear==="object")?saved.fixedByYear:{};
    specialByYear=(saved.specialByYear&&typeof saved.specialByYear==="object")?saved.specialByYear:{};
-   recurringFixedRules=Array.isArray(saved.recurringFixedRules)?saved.recurringFixedRules:[];
    reserve=saved.reserve&&typeof saved.reserve==="object"?saved.reserve:reserve;
    carryovers=Array.isArray(saved.carryovers)?saved.carryovers:carryovers;
    selectedYear=Number(saved.currentYear)||2026;
@@ -977,7 +902,6 @@ document.getElementById("csv").onclick=()=>{
   incomeNames.forEach(n=>rows.push([selectedYear,month,"Einnahme",n,"","","",data[m].income[n]]));
   fixed.forEach(x=>rows.push([selectedYear,month,"Fixkosten",x[0],"","","",x[1]]));
   Object.entries(specialValues(m)).forEach(([n,a])=>{if(a[m])rows.push([selectedYear,month,"Sonderkosten",n,"","","",a[m]])});
-  recurringFixedForMonth(m).forEach(r=>rows.push([selectedYear,month,"Wiederkehrende Fixkosten",r.name,"","","",r.amount]));
   data[m].expenses.forEach(e=>rows.push([selectedYear,month,"Variable Ausgabe",e.desc,e.date,e.cat,e.analysisCat||inferAnalysisCategory(e.desc,e.cat),e.amount]));
  });
  const csv=rows.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(";")).join("\n");
@@ -988,7 +912,7 @@ document.getElementById("csv").onclick=()=>{
 
 function monthExpenseTotal(m,year=selectedYear){const yd=allYears[String(year)];return Array.isArray(yd)&&yd[m]&&Array.isArray(yd[m].expenses)?yd[m].expenses.reduce((s,e)=>s+(Number(e.amount)||0),0):0;}
 function incomeTotalForYear(m,year){const yd=allYears[String(year)];return yd&&yd[m]?incomeNames.reduce((s,n)=>s+(Number(yd[m].income?.[n])||0),0):0;}
-function fixedTotalForYear(m,year){const vals=(fixedByYear[String(year)]&&fixedByYear[String(year)][m])||fixed.map(x=>Number(x[1]));const sv=ensureSpecialYear(year);return vals.reduce((s,v)=>s+(Number(v)||0),0)+Object.values(sv).reduce((s,a)=>s+(Number(a[m])||0),0)+recurringFixedTotal(m,year);}
+function fixedTotalForYear(m,year){const vals=(fixedByYear[String(year)]&&fixedByYear[String(year)][m])||fixed.map(x=>Number(x[1]));const sv=ensureSpecialYear(year);return vals.reduce((s,v)=>s+(Number(v)||0),0)+Object.values(sv).reduce((s,a)=>s+(Number(a[m])||0),0);}
 function analysisMonths(year){return year===2026?[8,9,10,11]:[0,1,2,3,4,5,6,7,8,9,10,11];}
 function analysisExpenses(year){const yd=allYears[String(year)]||[];return analysisMonths(year).flatMap(m=>(yd[m]?.expenses||[]).map(normalizeExpense));}
 function renderAnalysis(){
